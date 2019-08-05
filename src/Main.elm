@@ -1,11 +1,13 @@
 module Main exposing (Model, Msg(..), init, main, update, view)
 
 import Browser
-import Html exposing (Html, div, text)
+import Element exposing (..)
+import Html
 import Http
 import Json.Decode as Decode
 import Json.Decode.Pipeline exposing (required)
 import Json.Encode as Encode
+import Utils
 
 
 
@@ -32,9 +34,18 @@ type alias Account =
     }
 
 
+type TreeNode a
+    = TreeNode a (List (TreeNode a))
+
+
+type alias Tree a =
+    List (TreeNode a)
+
+
 type alias Model =
     { serverUrl : ServerUrl
     , accounts : List Account
+    , accountsTree : Tree Account
     , lastError : String
     }
 
@@ -48,6 +59,7 @@ init : Flags -> ( Model, Cmd Msg )
 init flags =
     ( { serverUrl = flags.serverUrl
       , accounts = []
+      , accountsTree = []
       , lastError = ""
       }
     , fetchAccounts flags.serverUrl
@@ -79,27 +91,45 @@ fetchAccounts serverUrl =
         }
 
 
+subtree : List Account -> Account -> TreeNode Account
+subtree allAccounts parent =
+    let
+        filterChildren =
+            \a ->
+                case a.parentId of
+                    Just id ->
+                        id == parent.id
+
+                    Nothing ->
+                        False
+
+        childNodes =
+            allAccounts
+                |> List.filter filterChildren
+                |> List.map (subtree allAccounts)
+    in
+    TreeNode parent childNodes
+
+
+toAccountTree : List Account -> Tree Account
+toAccountTree accounts =
+    let
+        isRoot account =
+            case account.parentId of
+                Just _ ->
+                    False
+
+                Nothing ->
+                    True
+
+        roots =
+            List.filter isRoot accounts
+    in
+    List.map (subtree accounts) roots
+
+
 
 ---- UPDATE ----
-
-
-httpErrorString : Http.Error -> String
-httpErrorString error =
-    case error of
-        Http.BadBody message ->
-            "Unable to handle response: " ++ message
-
-        Http.BadStatus statusCode ->
-            "Server error: " ++ String.fromInt statusCode
-
-        Http.BadUrl url ->
-            "Invalid URL: " ++ url
-
-        Http.NetworkError ->
-            "Network error"
-
-        Http.Timeout ->
-            "Request timeout"
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -109,25 +139,47 @@ update msg model =
             ( model, fetchAccounts model.serverUrl )
 
         ReceiveAccounts (Ok accounts) ->
-            ( { model | accounts = accounts }, Cmd.none )
+            ( { model | accounts = accounts, accountsTree = toAccountTree accounts }, Cmd.none )
 
         ReceiveAccounts (Err error) ->
-            ( { model | lastError = httpErrorString error }, Cmd.none )
+            ( { model | lastError = Utils.httpErrorString error }, Cmd.none )
 
 
 
 ---- VIEW ----
 
 
-view : Model -> Html Msg
+view : Model -> Html.Html Msg
 view model =
-    div []
-        ([ text model.lastError ] ++ List.map viewAccount model.accounts)
+    layout [] <|
+        column
+            [ width fill ]
+        <|
+            [ text model.lastError ]
+                ++ viewAccounts 0 model.accountsTree
 
 
-viewAccount : Account -> Html Msg
-viewAccount account =
-    div [] [ text account.name ]
+viewAccounts : Int -> Tree Account -> List (Element Msg)
+viewAccounts depth accounts =
+    List.concatMap (viewAccount depth) accounts
+
+
+viewAccount : Int -> TreeNode Account -> List (Element Msg)
+viewAccount depth node =
+    let
+        (TreeNode account childNodes) =
+            node
+
+        padding =
+            [ paddingEach { left = 20 * depth, right = 0, top = 0, bottom = 0 } ]
+    in
+    [ row [ width fill ]
+        [ column [ width (fillPortion 6) ] [ el padding (text account.name) ]
+        , column [ width (fillPortion 2) ] [ el [] (text account.type_) ]
+        , column [ width (fillPortion 2) ] [ el [] (text account.currency) ]
+        ]
+    ]
+        ++ viewAccounts (depth + 1) childNodes
 
 
 
