@@ -1,27 +1,34 @@
-module Page.Index exposing (Model, Msg, view)
+module Page.Index exposing (Model, Msg(..), init, view)
 
 import Data.Account exposing (Account)
 import Element exposing (..)
+import Element.Events exposing (onClick)
 import Tree
 
 
 type Msg
-    = NoOp
+    = OpenAccount Account
 
 
 type alias Model =
-    { accountsTree : Tree.Multitree Account
-    , lastError : String
+    { lastError : String
     }
 
 
-view : Model -> Element Msg
-view model =
+init : ( Model, Cmd Msg )
+init =
+    ( { lastError = "" }
+    , Cmd.none
+    )
+
+
+view : { a | accountsTree : Tree.Multitree Account } -> Model -> Element Msg
+view appState model =
     column
         [ width fill ]
     <|
         [ text model.lastError ]
-            ++ viewAccounts 0 model.accountsTree
+            ++ viewAccounts 0 appState.accountsTree
 
 
 viewAccounts : Int -> Tree.Multitree Account -> List (Element Msg)
@@ -35,11 +42,14 @@ viewAccount depth node =
         (Tree.Node account childNodes) =
             node
 
-        padding =
-            [ paddingEach { left = 20 * depth, right = 0, top = 0, bottom = 0 } ]
+        style =
+            [ paddingEach { left = 20 * depth, right = 0, top = 0, bottom = 0 }
+            , pointer
+            , onClick (OpenAccount account)
+            ]
     in
     [ row [ width fill ]
-        [ column [ width (fillPortion 6) ] [ el padding (text account.name) ]
+        [ column [ width (fillPortion 6) ] [ el style (text account.name) ]
         , column [ width (fillPortion 2) ] [ el [] (text account.type_) ]
         , column [ width (fillPortion 2) ] [ el [] (text account.currency) ]
         ]

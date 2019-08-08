@@ -8,6 +8,7 @@ import Http
 import Json.Decode as Decode
 import Json.Decode.Pipeline exposing (required)
 import Json.Encode as Encode
+import Page.Account
 import Page.Index
 import Tree
 import Utils
@@ -17,21 +18,33 @@ import Utils
 ---- MODEL ----
 
 
+type Page
+    = IndexPage Page.Index.Model
+    | AccountPage Page.Account.Model
+
+
 type Msg
     = RequestAccounts
     | ReceiveAccounts (Result Http.Error (List Account))
-    | Index Page.Index.Msg
+    | IndexMsg Page.Index.Msg
+    | AccountMsg Page.Account.Msg
 
 
 type alias ServerUrl =
     String
 
 
-type alias Model =
+type alias AppState =
     { serverUrl : ServerUrl
     , accounts : List Account
     , accountsTree : Tree.Multitree Account
     , lastError : String
+    }
+
+
+type alias Model =
+    { appState : AppState
+    , currentPage : Page
     }
 
 
@@ -42,12 +55,27 @@ type alias Flags =
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    ( { serverUrl = flags.serverUrl
-      , accounts = []
-      , accountsTree = []
-      , lastError = ""
+    let
+        appState =
+            { serverUrl = flags.serverUrl
+            , accounts = []
+            , accountsTree = []
+            , lastError = ""
+            }
+
+        ( pageModel, pageCmd ) =
+            Page.Index.init
+
+        fetchAccountsCmd =
+            fetchAccounts flags.serverUrl
+
+        mappedPageCmd =
+            Cmd.map IndexMsg pageCmd
+    in
+    ( { appState = appState
+      , currentPage = IndexPage pageModel
       }
-    , fetchAccounts flags.serverUrl
+    , Cmd.batch [ fetchAccountsCmd, mappedPageCmd ]
     )
 
 
@@ -81,10 +109,10 @@ fetchAccounts serverUrl =
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
+update msg ({ appState } as model) =
     case msg of
         RequestAccounts ->
-            ( model, fetchAccounts model.serverUrl )
+            ( model, fetchAccounts appState.serverUrl )
 
         ReceiveAccounts (Ok accounts) ->
             let
@@ -106,13 +134,29 @@ update msg model =
 
                 accountsTree =
                     Tree.toTree rootsFilter childrenFilter accounts
+
+                newAppState =
+                    { appState | accounts = accounts, accountsTree = accountsTree }
             in
-            ( { model | accounts = accounts, accountsTree = accountsTree }, Cmd.none )
+            ( { model | appState = newAppState }, Cmd.none )
 
         ReceiveAccounts (Err error) ->
-            ( { model | lastError = Utils.httpErrorString error }, Cmd.none )
+            let
+                newAppState =
+                    { appState | lastError = Utils.httpErrorString error }
+            in
+            ( { model | appState = newAppState }, Cmd.none )
 
-        Index _ ->
+        IndexMsg pageMsg ->
+            case pageMsg of
+                Page.Index.OpenAccount account ->
+                    let
+                        ( pageModel, pageCmd ) =
+                            Page.Account.init account
+                    in
+                    ( { model | currentPage = AccountPage pageModel }, Cmd.map AccountMsg pageCmd )
+
+        AccountMsg _ ->
             ( model, Cmd.none )
 
 
@@ -123,13 +167,16 @@ update msg model =
 view : Model -> Html.Html Msg
 view model =
     let
-        pageModel =
-            { accountsTree = model.accountsTree
-            , lastError = model.lastError
-            }
+        appState =
+            model.appState
 
         pageView =
-            Page.Index.view pageModel |> Element.map Index
+            case model.currentPage of
+                IndexPage pageModel ->
+                    Page.Index.view appState pageModel |> Element.map IndexMsg
+
+                AccountPage pageModel ->
+                    Page.Account.view pageModel |> Element.map AccountMsg
     in
     Element.layout [] pageView
 
