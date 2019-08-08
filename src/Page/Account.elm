@@ -2,9 +2,11 @@ module Page.Account exposing (Model, Msg(..), init, update, view)
 
 import Data.Account exposing (Account)
 import Data.Transaction exposing (Transaction, decodeTransaction)
+import DateFormat
 import Element exposing (..)
 import Http
 import Json.Decode as Decode
+import Time
 import Utils
 
 
@@ -17,6 +19,7 @@ type alias Model =
     { account : Account
     , transactions : List Transaction
     , lastError : String
+    , timezone : Time.Zone
     }
 
 
@@ -29,6 +32,7 @@ init appState account =
     ( { account = account
       , transactions = []
       , lastError = ""
+      , timezone = Time.utc
       }
     , fetchTransactions appState.serverUrl account
     )
@@ -65,12 +69,12 @@ view model =
     column [ width fill ]
         [ el [] <| text model.lastError
         , el [] <| text model.account.name
-        , viewTransactions model.transactions
+        , viewTransactions model
         ]
 
 
-viewTransactions : List Transaction -> Element Msg
-viewTransactions transactions =
+viewTransactions : Model -> Element Msg
+viewTransactions { transactions, timezone } =
     table
         [ width fill ]
         { data = transactions
@@ -78,8 +82,8 @@ viewTransactions transactions =
             [ { header = text "Date"
               , width = fillPortion 10
               , view =
-                    \_ ->
-                        text "TBD"
+                    \transaction ->
+                        viewTimestamp timezone transaction
               }
             , { header = text "Description"
               , width = fillPortion 40
@@ -113,3 +117,19 @@ viewTransactions transactions =
               }
             ]
         }
+
+
+viewTimestamp : Time.Zone -> Transaction -> Element Msg
+viewTimestamp timezone transaction =
+    text (formatTimestamp timezone transaction.timestamp)
+
+
+formatTimestamp : Time.Zone -> Time.Posix -> String
+formatTimestamp =
+    DateFormat.format
+        [ DateFormat.dayOfMonthNumber
+        , DateFormat.text "."
+        , DateFormat.monthFixed
+        , DateFormat.text "."
+        , DateFormat.yearNumber
+        ]
