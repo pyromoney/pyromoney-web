@@ -2,6 +2,7 @@ module Main exposing (Model, Msg(..), init, main, update, view)
 
 import Browser
 import Data.Account exposing (Account, decodeAccount)
+import Dict exposing (Dict)
 import Element
 import Html
 import Http
@@ -33,9 +34,13 @@ type alias ServerUrl =
     String
 
 
+type alias AccountId =
+    String
+
+
 type alias AppState =
     { serverUrl : ServerUrl
-    , accounts : List Account
+    , accountsDict : Dict AccountId Account
     , accountsTree : Tree.Multitree Account
     , lastError : String
     }
@@ -57,8 +62,8 @@ init flags =
     let
         appState =
             { serverUrl = flags.serverUrl
-            , accounts = []
-            , accountsTree = []
+            , accountsDict = Dict.empty
+            , accountsTree = Tree.empty
             , lastError = ""
             }
 
@@ -96,13 +101,18 @@ fetchAccounts serverUrl =
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg ({ appState } as model) =
-    case msg of
-        RequestAccounts ->
+update msg ({ appState, currentPage } as model) =
+    case ( msg, currentPage ) of
+        ( RequestAccounts, _ ) ->
             ( model, fetchAccounts appState.serverUrl )
 
-        ReceiveAccounts (Ok accounts) ->
+        ( ReceiveAccounts (Ok accounts), _ ) ->
             let
+                accountsDict =
+                    accounts
+                        |> List.map (\a -> ( a.id, a ))
+                        |> Dict.fromList
+
                 rootsFilter account =
                     case account.parentId of
                         Just _ ->
@@ -123,27 +133,36 @@ update msg ({ appState } as model) =
                     Tree.toTree rootsFilter childrenFilter accounts
 
                 newAppState =
-                    { appState | accounts = accounts, accountsTree = accountsTree }
+                    { appState | accountsDict = accountsDict, accountsTree = accountsTree }
             in
             ( { model | appState = newAppState }, Cmd.none )
 
-        ReceiveAccounts (Err error) ->
+        ( ReceiveAccounts (Err error), _ ) ->
             let
                 newAppState =
                     { appState | lastError = Utils.httpErrorString error }
             in
             ( { model | appState = newAppState }, Cmd.none )
 
-        IndexMsg pageMsg ->
-            case pageMsg of
-                Page.Index.OpenAccount account ->
-                    let
-                        ( pageModel, pageCmd ) =
-                            Page.Account.init account
-                    in
-                    ( { model | currentPage = AccountPage pageModel }, Cmd.map AccountMsg pageCmd )
+        ( IndexMsg (Page.Index.OpenAccount account), IndexPage _ ) ->
+            let
+                ( newPageModel, newPageCmd ) =
+                    Page.Account.init appState account
+            in
+            ( { model | currentPage = AccountPage newPageModel }
+            , Cmd.map AccountMsg newPageCmd
+            )
 
-        AccountMsg _ ->
+        ( AccountMsg pageMsg, AccountPage pageModel ) ->
+            let
+                ( newPageModel, newPageCmd ) =
+                    Page.Account.update appState pageMsg pageModel
+            in
+            ( { model | currentPage = AccountPage newPageModel }
+            , Cmd.map AccountMsg newPageCmd
+            )
+
+        ( _, _ ) ->
             ( model, Cmd.none )
 
 

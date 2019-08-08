@@ -11,13 +11,12 @@ type Msg
 
 
 type alias Model =
-    { lastError : String
-    }
+    {}
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { lastError = "" }
+    ( {}
     , Cmd.none
     )
 
@@ -26,9 +25,7 @@ view : { a | accountsTree : Tree.Multitree Account } -> Model -> Element Msg
 view appState model =
     column
         [ width fill ]
-    <|
-        [ text model.lastError ]
-            ++ viewAccounts 0 appState.accountsTree
+        (viewAccounts 0 appState.accountsTree)
 
 
 viewAccounts : Int -> Tree.Multitree Account -> List (Element Msg)

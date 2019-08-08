@@ -1,4 +1,4 @@
-module Tree exposing (Multitree, Node(..), toTree)
+module Tree exposing (Multitree, Node(..), empty, toTree)
 
 
 type Node a
@@ -27,3 +27,8 @@ toTree rootsFilter childrenFilter items =
             List.filter rootsFilter items
     in
     List.map (subtree childrenFilter items) roots
+
+
+empty : Multitree a
+empty =
+    []
