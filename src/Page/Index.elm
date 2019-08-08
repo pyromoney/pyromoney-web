@@ -1,6 +1,6 @@
 module Page.Index exposing (Model, Msg(..), init, view)
 
-import Data.Account exposing (Account)
+import Data.Account exposing (Account, Type(..))
 import Element exposing (..)
 import Element.Events exposing (onClick)
 import Tree
@@ -50,8 +50,36 @@ viewAccount depth node =
     in
     [ row [ width fill ]
         [ column [ width (fillPortion 6) ] [ el style (text account.name) ]
-        , column [ width (fillPortion 2) ] [ el [] (text account.type_) ]
+        , column [ width (fillPortion 2) ] [ el [] (text (viewType account)) ]
         , column [ width (fillPortion 2) ] [ el [] (text account.currency) ]
         ]
     ]
         ++ viewAccounts (depth + 1) childNodes
+
+
+viewType : Account -> String
+viewType account =
+    case account.type_ of
+        Asset ->
+            "Asset"
+
+        Cash ->
+            "Cash"
+
+        Bank ->
+            "Bank"
+
+        Liability ->
+            "Liability"
+
+        Income ->
+            "Income"
+
+        Expense ->
+            "Expense"
+
+        Equity ->
+            "Equity"
+
+        Trading ->
+            "Trading"

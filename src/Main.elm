@@ -1,12 +1,11 @@
 module Main exposing (Model, Msg(..), init, main, update, view)
 
 import Browser
-import Data.Account exposing (Account)
+import Data.Account exposing (Account, decodeAccount)
 import Element
 import Html
 import Http
 import Json.Decode as Decode
-import Json.Decode.Pipeline exposing (required)
 import Json.Encode as Encode
 import Page.Account
 import Page.Index
@@ -82,18 +81,6 @@ init flags =
 decodeAccounts : Decode.Decoder (List Account)
 decodeAccounts =
     Decode.field "data" (Decode.list decodeAccount)
-
-
-decodeAccount : Decode.Decoder Account
-decodeAccount =
-    Decode.succeed Account
-        |> required "id" Decode.string
-        |> required "parent_id" (Decode.nullable Decode.string)
-        |> required "name" Decode.string
-        |> required "type" Decode.string
-        |> required "currency" Decode.string
-        |> required "hidden" Decode.bool
-        |> required "virtual" Decode.bool
 
 
 fetchAccounts : ServerUrl -> Cmd Msg
