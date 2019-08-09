@@ -3,6 +3,7 @@ module Page.Account exposing (Model, Msg(..), init, update, view)
 import Data.Account exposing (Account)
 import Data.Transaction exposing (Transaction, decodeTransaction)
 import DateFormat
+import Dict exposing (Dict)
 import Element exposing (..)
 import Http
 import Json.Decode as Decode
@@ -23,39 +24,46 @@ type alias Model =
     }
 
 
+type alias AppState a =
+    { a | serverUrl : ServerUrl, accountsDict : Dict AccountId Account }
+
+
 type alias ServerUrl =
     String
 
 
-init : { a | serverUrl : ServerUrl } -> Account -> ( Model, Cmd Msg )
-init appState account =
+type alias AccountId =
+    String
+
+
+init : AppState a -> Account -> ( Model, Cmd Msg )
+init { serverUrl, accountsDict } account =
     ( { account = account
       , transactions = []
       , lastError = ""
       , timezone = Time.utc
       }
-    , fetchTransactions appState.serverUrl account
+    , fetchTransactions serverUrl accountsDict account
     )
 
 
-decodeTransactions : Decode.Decoder (List Transaction)
-decodeTransactions =
-    Decode.field "data" (Decode.list decodeTransaction)
-
-
-fetchTransactions : ServerUrl -> Account -> Cmd Msg
-fetchTransactions serverUrl account =
+fetchTransactions : ServerUrl -> Dict AccountId Account -> Account -> Cmd Msg
+fetchTransactions serverUrl accountsDict account =
+    let
+        decoder =
+            Decode.field "data" (Decode.list (decodeTransaction accountsDict))
+    in
     Http.get
         { url = serverUrl ++ "/accounts/" ++ account.id ++ "/transactions"
-        , expect = Http.expectJson ReceiveTransactions decodeTransactions
+        , expect = Http.expectJson ReceiveTransactions decoder
         }
 
 
-update : { a | serverUrl : ServerUrl } -> Msg -> Model -> ( Model, Cmd Msg )
-update appState msg model =
+update : AppState a -> Msg -> Model -> ( Model, Cmd Msg )
+update { serverUrl, accountsDict } msg model =
     case msg of
         RequestTransactions account ->
-            ( model, fetchTransactions appState.serverUrl account )
+            ( model, fetchTransactions serverUrl accountsDict account )
 
         ReceiveTransactions (Ok transactions) ->
             ( { model | transactions = transactions }, Cmd.none )
@@ -64,17 +72,17 @@ update appState msg model =
             ( { model | lastError = Utils.httpErrorString error }, Cmd.none )
 
 
-view : Model -> Element Msg
-view model =
+view : AppState a -> Model -> Element Msg
+view appState model =
     column [ width fill ]
         [ el [] <| text model.lastError
         , el [] <| text model.account.name
-        , viewTransactions model
+        , viewTransactions appState model
         ]
 
 
-viewTransactions : Model -> Element Msg
-viewTransactions { transactions, timezone } =
+viewTransactions : AppState a -> Model -> Element Msg
+viewTransactions appState { transactions, timezone } =
     table
         [ width fill ]
         { data = transactions

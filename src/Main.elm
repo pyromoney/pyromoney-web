@@ -83,16 +83,15 @@ init flags =
     )
 
 
-decodeAccounts : Decode.Decoder (List Account)
-decodeAccounts =
-    Decode.field "data" (Decode.list decodeAccount)
-
-
 fetchAccounts : ServerUrl -> Cmd Msg
 fetchAccounts serverUrl =
+    let
+        decoder =
+            Decode.field "data" (Decode.list decodeAccount)
+    in
     Http.get
         { url = serverUrl ++ "/accounts"
-        , expect = Http.expectJson ReceiveAccounts decodeAccounts
+        , expect = Http.expectJson ReceiveAccounts decoder
         }
 
 
@@ -182,7 +181,7 @@ view model =
                     Page.Index.view appState pageModel |> Element.map IndexMsg
 
                 AccountPage pageModel ->
-                    Page.Account.view pageModel |> Element.map AccountMsg
+                    Page.Account.view appState pageModel |> Element.map AccountMsg
     in
     Element.layout [] pageView
 

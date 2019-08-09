@@ -1,5 +1,7 @@
 module Data.Transaction exposing (Split, Transaction, decodeTransaction)
 
+import Data.Account exposing (Account)
+import Dict exposing (Dict)
 import Iso8601
 import Json.Decode as Decode
 import Json.Decode.Pipeline exposing (optional, required)
@@ -16,7 +18,7 @@ type alias Transaction =
 
 type alias Split =
     { id : SplitId
-    , accountId : AccountId
+    , account : Account
     , description : String
     , amount : Float
     }
@@ -34,22 +36,36 @@ type alias AccountId =
     String
 
 
-decodeTransaction : Decode.Decoder Transaction
-decodeTransaction =
+decodeTransaction : Dict AccountId Account -> Decode.Decoder Transaction
+decodeTransaction accountsDict =
     Decode.succeed Transaction
         |> required "id" Decode.string
         |> optional "description" Decode.string ""
         |> required "timestamp" decodeTimestamp
-        |> required "splits" (Decode.list decodeSplit)
+        |> required "splits" (Decode.list <| decodeSplit accountsDict)
 
 
-decodeSplit : Decode.Decoder Split
-decodeSplit =
+decodeSplit : Dict AccountId Account -> Decode.Decoder Split
+decodeSplit accountsDict =
     Decode.succeed Split
         |> required "id" Decode.string
-        |> required "account_id" Decode.string
+        |> required "account_id" (decodeAccount accountsDict)
         |> optional "description" Decode.string ""
         |> required "amount" decodeAmount
+
+
+decodeAccount : Dict AccountId Account -> Decode.Decoder Account
+decodeAccount accountsDict =
+    Decode.string
+        |> Decode.andThen
+            (\accountId ->
+                case Dict.get accountId accountsDict of
+                    Just account ->
+                        Decode.succeed account
+
+                    Nothing ->
+                        Decode.fail <| "Unknown account " ++ accountId
+            )
 
 
 decodeTimestamp : Decode.Decoder Time.Posix
