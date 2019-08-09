@@ -114,7 +114,11 @@ viewLedgerEntries appState { ledgerEntries, timezone } =
               , width = fillPortion 10
               , view =
                     \ledgerEntry ->
-                        text <| String.fromFloat <| ledgerEntry.split.amount
+                        if ledgerEntry.split.amount > 0 then
+                            text <| String.fromFloat <| ledgerEntry.split.amount
+
+                        else
+                            text ""
               }
             , { header = text "Other split"
               , width = fillPortion 10
@@ -122,7 +126,11 @@ viewLedgerEntries appState { ledgerEntries, timezone } =
                     \ledgerEntry ->
                         case ledgerEntry.otherSplits of
                             [ split ] ->
-                                text <| String.fromFloat <| split.amount
+                                if split.amount > 0 then
+                                    text <| String.fromFloat <| split.amount
+
+                                else
+                                    text ""
 
                             _ ->
                                 text "Split transaction"
