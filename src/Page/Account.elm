@@ -1,7 +1,7 @@
 module Page.Account exposing (Model, Msg(..), init, update, view)
 
 import Data.Account exposing (Account)
-import Data.Transaction exposing (Transaction, decodeTransaction)
+import Data.Transaction exposing (LedgerEntry, decodeLedgerEntry)
 import DateFormat
 import Dict exposing (Dict)
 import Element exposing (..)
@@ -12,13 +12,13 @@ import Utils
 
 
 type Msg
-    = RequestTransactions Account
-    | ReceiveTransactions (Result Http.Error (List Transaction))
+    = RequestLedgerEntries Account
+    | ReceiveLedgerEntries (Result Http.Error (List LedgerEntry))
 
 
 type alias Model =
     { account : Account
-    , transactions : List Transaction
+    , ledgerEntries : List LedgerEntry
     , lastError : String
     , timezone : Time.Zone
     }
@@ -39,36 +39,36 @@ type alias AccountId =
 init : AppState a -> Account -> ( Model, Cmd Msg )
 init { serverUrl, accountsDict } account =
     ( { account = account
-      , transactions = []
+      , ledgerEntries = []
       , lastError = ""
       , timezone = Time.utc
       }
-    , fetchTransactions serverUrl accountsDict account
+    , fetchLedgerEntries serverUrl accountsDict account
     )
 
 
-fetchTransactions : ServerUrl -> Dict AccountId Account -> Account -> Cmd Msg
-fetchTransactions serverUrl accountsDict account =
+fetchLedgerEntries : ServerUrl -> Dict AccountId Account -> Account -> Cmd Msg
+fetchLedgerEntries serverUrl accountsDict account =
     let
         decoder =
-            Decode.field "data" (Decode.list (decodeTransaction accountsDict))
+            Decode.field "data" (Decode.list (decodeLedgerEntry accountsDict account))
     in
     Http.get
         { url = serverUrl ++ "/accounts/" ++ account.id ++ "/transactions"
-        , expect = Http.expectJson ReceiveTransactions decoder
+        , expect = Http.expectJson ReceiveLedgerEntries decoder
         }
 
 
 update : AppState a -> Msg -> Model -> ( Model, Cmd Msg )
 update { serverUrl, accountsDict } msg model =
     case msg of
-        RequestTransactions account ->
-            ( model, fetchTransactions serverUrl accountsDict account )
+        RequestLedgerEntries account ->
+            ( model, fetchLedgerEntries serverUrl accountsDict account )
 
-        ReceiveTransactions (Ok transactions) ->
-            ( { model | transactions = transactions }, Cmd.none )
+        ReceiveLedgerEntries (Ok ledgerEntries) ->
+            ( { model | ledgerEntries = ledgerEntries }, Cmd.none )
 
-        ReceiveTransactions (Err error) ->
+        ReceiveLedgerEntries (Err error) ->
             ( { model | lastError = Utils.httpErrorString error }, Cmd.none )
 
 
@@ -77,45 +77,55 @@ view appState model =
     column [ width fill ]
         [ el [] <| text model.lastError
         , el [] <| text model.account.name
-        , viewTransactions appState model
+        , viewLedgerEntries appState model
         ]
 
 
-viewTransactions : AppState a -> Model -> Element Msg
-viewTransactions appState { transactions, timezone } =
+viewLedgerEntries : AppState a -> Model -> Element Msg
+viewLedgerEntries appState { ledgerEntries, timezone } =
     table
         [ width fill ]
-        { data = transactions
+        { data = ledgerEntries
         , columns =
             [ { header = text "Date"
               , width = fillPortion 10
               , view =
-                    \transaction ->
-                        viewTimestamp timezone transaction
+                    \ledgerEntry ->
+                        viewTimestamp timezone ledgerEntry
               }
             , { header = text "Description"
               , width = fillPortion 40
               , view =
-                    \transaction ->
-                        text transaction.description
+                    \ledgerEntry ->
+                        text ledgerEntry.transaction.description
               }
             , { header = text "Transfer"
               , width = fillPortion 20
               , view =
-                    \_ ->
-                        text "TBD"
+                    \ledgerEntry ->
+                        case ledgerEntry.otherSplits of
+                            [ split ] ->
+                                text split.account.name
+
+                            _ ->
+                                text "Split transaction"
               }
             , { header = text "Own split"
               , width = fillPortion 10
               , view =
-                    \_ ->
-                        text "TBD"
+                    \ledgerEntry ->
+                        text <| String.fromFloat <| ledgerEntry.split.amount
               }
             , { header = text "Other split"
               , width = fillPortion 10
               , view =
-                    \_ ->
-                        text "TBD"
+                    \ledgerEntry ->
+                        case ledgerEntry.otherSplits of
+                            [ split ] ->
+                                text <| String.fromFloat <| split.amount
+
+                            _ ->
+                                text "Split transaction"
               }
             , { header = text "Balance"
               , width = fillPortion 10
@@ -127,9 +137,9 @@ viewTransactions appState { transactions, timezone } =
         }
 
 
-viewTimestamp : Time.Zone -> Transaction -> Element Msg
-viewTimestamp timezone transaction =
-    text (formatTimestamp timezone transaction.timestamp)
+viewTimestamp : Time.Zone -> LedgerEntry -> Element Msg
+viewTimestamp timezone ledgerEntry =
+    text (formatTimestamp timezone ledgerEntry.transaction.timestamp)
 
 
 formatTimestamp : Time.Zone -> Time.Posix -> String

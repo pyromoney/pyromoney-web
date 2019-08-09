@@ -1,4 +1,4 @@
-module Data.Transaction exposing (Split, Transaction, decodeTransaction)
+module Data.Transaction exposing (LedgerEntry, Split, Transaction, decodeLedgerEntry, decodeTransaction)
 
 import Data.Account exposing (Account)
 import Dict exposing (Dict)
@@ -6,6 +6,27 @@ import Iso8601
 import Json.Decode as Decode
 import Json.Decode.Pipeline exposing (optional, required)
 import Time
+
+
+
+{-
+
+   A transaction is an exchange between at least two accounts.
+   A single transaction always consists of at least two parts, a from and a to account.
+
+   These parts are called Splits.
+
+   A transaction with only two splits is called a simple transaction.
+   A transaction with three or more accounts is called a split transaction.
+   Though we don't distinguish them in our data models.
+
+   For convenience there is a LedgerEntry type which is basically a transaction
+   in context of the specific account. It's `split` attribute is a split belonging
+   to the selected account and the `otherSplits` is a list of splits that belong
+   to other accounts.
+
+   If decoder fails to find any of the specified accounts the whole JSON is considered invalid.
+-}
 
 
 type alias Transaction =
@@ -21,6 +42,13 @@ type alias Split =
     , account : Account
     , description : String
     , amount : Float
+    }
+
+
+type alias LedgerEntry =
+    { transaction : Transaction
+    , split : Split
+    , otherSplits : List Split
     }
 
 
@@ -52,6 +80,40 @@ decodeSplit accountsDict =
         |> required "account_id" (decodeAccount accountsDict)
         |> optional "description" Decode.string ""
         |> required "amount" decodeAmount
+
+
+decodeLedgerEntry : Dict AccountId Account -> Account -> Decode.Decoder LedgerEntry
+decodeLedgerEntry accountsDict currentAccount =
+    decodeTransaction accountsDict
+        |> Decode.andThen
+            (\transaction ->
+                let
+                    isCurrent =
+                        \split -> split.account.id == currentAccount.id
+
+                    currentSplits =
+                        List.filter isCurrent transaction.splits
+
+                    otherSplits =
+                        List.filter (not << isCurrent) transaction.splits
+                in
+                case ( currentSplits, otherSplits ) of
+                    ( [], _ ) ->
+                        Decode.fail <| "Missing current split in " ++ transaction.id
+
+                    ( _, [] ) ->
+                        Decode.fail <| "Missing other splits in " ++ transaction.id
+
+                    ( [ split ], _ ) ->
+                        Decode.succeed
+                            { transaction = transaction
+                            , split = split
+                            , otherSplits = otherSplits
+                            }
+
+                    ( _, _ ) ->
+                        Decode.fail <| "Too many matching current splits in " ++ transaction.id
+            )
 
 
 decodeAccount : Dict AccountId Account -> Decode.Decoder Account
