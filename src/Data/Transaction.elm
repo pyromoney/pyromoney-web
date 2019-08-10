@@ -1,4 +1,4 @@
-module Data.Transaction exposing (LedgerEntry, Split, Transaction, decodeLedgerEntry, decodeTransaction)
+module Data.Transaction exposing (LedgerEntry, Split, Transaction, decodeLedgerEntry, decodeSplit, decodeTransaction)
 
 import Data.Account exposing (Account)
 import Dict exposing (Dict)
