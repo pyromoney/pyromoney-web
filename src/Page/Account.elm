@@ -74,75 +74,61 @@ update { serverUrl, accountsDict } msg model =
 
 view : AppState a -> Model -> Element Msg
 view appState model =
-    column [ width fill ]
+    column [ width fill ] <|
         [ el [] <| text model.lastError
         , el [] <| text model.account.name
-        , viewLedgerEntries appState model
         ]
+            ++ viewLedgerEntries appState model
 
 
-viewLedgerEntries : AppState a -> Model -> Element Msg
-viewLedgerEntries appState { ledgerEntries, timezone } =
-    table
+viewLedgerEntries : AppState a -> Model -> List (Element Msg)
+viewLedgerEntries appState model =
+    row [ width fill ]
+        [ column [ width (fillPortion 10) ] [ text "Date" ]
+        , column [ width (fillPortion 40) ] [ text "Description" ]
+        , column [ width (fillPortion 20) ] [ text "Transfer" ]
+        , column [ width (fillPortion 10) ] [ text "Own split" ]
+        , column [ width (fillPortion 10) ] [ text "Other split" ]
+        , column [ width (fillPortion 10) ] [ text "Balance" ]
+        ]
+        :: List.map (viewLedgerEntry appState model) model.ledgerEntries
+
+
+viewLedgerEntry : AppState a -> Model -> LedgerEntry -> Element Msg
+viewLedgerEntry appState { timezone } ledgerEntry =
+    row
         [ width fill ]
-        { data = ledgerEntries
-        , columns =
-            [ { header = text "Date"
-              , width = fillPortion 10
-              , view =
-                    \ledgerEntry ->
-                        viewTimestamp timezone ledgerEntry
-              }
-            , { header = text "Description"
-              , width = fillPortion 40
-              , view =
-                    \ledgerEntry ->
-                        text ledgerEntry.transaction.description
-              }
-            , { header = text "Transfer"
-              , width = fillPortion 20
-              , view =
-                    \ledgerEntry ->
-                        case ledgerEntry.otherSplits of
-                            [ split ] ->
-                                text split.account.name
+        [ column [ width (fillPortion 10) ] [ viewTimestamp timezone ledgerEntry ]
+        , column [ width (fillPortion 40) ] [ text ledgerEntry.transaction.description ]
+        , column [ width (fillPortion 20) ]
+            [ case ledgerEntry.otherSplits of
+                [ split ] ->
+                    text split.account.name
 
-                            _ ->
-                                text "Split transaction"
-              }
-            , { header = text "Own split"
-              , width = fillPortion 10
-              , view =
-                    \ledgerEntry ->
-                        if ledgerEntry.split.amount > 0 then
-                            text <| String.fromFloat <| ledgerEntry.split.amount
-
-                        else
-                            text ""
-              }
-            , { header = text "Other split"
-              , width = fillPortion 10
-              , view =
-                    \ledgerEntry ->
-                        case ledgerEntry.otherSplits of
-                            [ split ] ->
-                                if split.amount > 0 then
-                                    text <| String.fromFloat <| split.amount
-
-                                else
-                                    text ""
-
-                            _ ->
-                                text "Split transaction"
-              }
-            , { header = text "Balance"
-              , width = fillPortion 10
-              , view =
-                    \_ ->
-                        text "TBD"
-              }
+                _ ->
+                    text "Split transaction"
             ]
-        }
+        , column [ width (fillPortion 10) ]
+            [ if ledgerEntry.split.amount > 0 then
+                text <| String.fromFloat <| ledgerEntry.split.amount
+
+              else
+                text ""
+            ]
+        , column [ width (fillPortion 10) ]
+            [ case ledgerEntry.otherSplits of
+                [ split ] ->
+                    if split.amount > 0 then
+                        text <| String.fromFloat <| split.amount
+
+                    else
+                        text ""
+
+                _ ->
+                    text "Split transaction"
+            ]
+        , column [ width (fillPortion 10) ] [ text "TBD" ]
+        ]
 
 
 viewTimestamp : Time.Zone -> LedgerEntry -> Element Msg
