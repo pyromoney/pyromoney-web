@@ -8,8 +8,10 @@ import Html
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Loadable exposing (Loadable(..))
 import Page.Account
 import Page.Index
+import Task
 import Tree
 import Utils
 
@@ -24,8 +26,7 @@ type Page
 
 
 type Msg
-    = RequestAccounts
-    | ReceiveAccounts (Result Http.Error (List Account))
+    = ReceiveAccounts (Result Http.Error (List Account))
     | IndexMsg Page.Index.Msg
     | AccountMsg Page.Account.Msg
 
@@ -42,14 +43,20 @@ type alias AppState =
     { serverUrl : ServerUrl
     , accountsDict : Dict AccountId Account
     , accountsTree : Tree.Multitree Account
-    , lastError : String
     }
+
+
+type NextPage
+    = NextIndexPage
+    | NextAccountPage AccountId
 
 
 type alias Model =
-    { appState : AppState
-    , currentPage : Page
-    }
+    Loadable
+        { appState : AppState
+        , currentPage : Page
+        }
+        NextPage
 
 
 type alias Flags =
@@ -59,27 +66,8 @@ type alias Flags =
 
 init : Flags -> ( Model, Cmd Msg )
 init flags =
-    let
-        appState =
-            { serverUrl = flags.serverUrl
-            , accountsDict = Dict.empty
-            , accountsTree = Tree.empty
-            , lastError = ""
-            }
-
-        ( pageModel, pageCmd ) =
-            Page.Index.init
-
-        fetchAccountsCmd =
-            fetchAccounts flags.serverUrl
-
-        mappedPageCmd =
-            Cmd.map IndexMsg pageCmd
-    in
-    ( { appState = appState
-      , currentPage = IndexPage pageModel
-      }
-    , Cmd.batch [ fetchAccountsCmd, mappedPageCmd ]
+    ( Loading NextIndexPage
+    , fetchAccounts flags.serverUrl
     )
 
 
@@ -100,69 +88,105 @@ fetchAccounts serverUrl =
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg ({ appState, currentPage } as model) =
-    case ( msg, currentPage ) of
-        ( RequestAccounts, _ ) ->
-            ( model, fetchAccounts appState.serverUrl )
+update msg model =
+    case model of
+        Loaded ({ appState, currentPage } as loadedModel) ->
+            case ( msg, currentPage ) of
+                ( IndexMsg (Page.Index.OpenAccount account), IndexPage _ ) ->
+                    let
+                        ( newPageModel, newPageCmd ) =
+                            Page.Account.init appState account
+                    in
+                    ( Loaded { loadedModel | currentPage = AccountPage newPageModel }
+                    , Cmd.map AccountMsg newPageCmd
+                    )
 
-        ( ReceiveAccounts (Ok accounts), _ ) ->
-            let
-                accountsDict =
-                    accounts
-                        |> List.map (\a -> ( a.id, a ))
-                        |> Dict.fromList
+                ( AccountMsg pageMsg, AccountPage pageModel ) ->
+                    let
+                        ( newPageModel, newPageCmd ) =
+                            Page.Account.update appState pageMsg pageModel
+                    in
+                    ( Loaded { loadedModel | currentPage = AccountPage newPageModel }
+                    , Cmd.map AccountMsg newPageCmd
+                    )
 
-                rootsFilter account =
-                    case account.parentId of
-                        Just _ ->
-                            False
+                ( _, _ ) ->
+                    ( model, Cmd.none )
 
-                        Nothing ->
-                            True
+        Loading nextPage ->
+            case msg of
+                ReceiveAccounts (Ok accounts) ->
+                    let
+                        accountsDict =
+                            accounts
+                                |> List.map (\a -> ( a.id, a ))
+                                |> Dict.fromList
 
-                childrenFilter parentAccount account =
-                    case account.parentId of
-                        Just id ->
-                            id == parentAccount.id
+                        rootsFilter account =
+                            case account.parentId of
+                                Just _ ->
+                                    False
 
-                        Nothing ->
-                            False
+                                Nothing ->
+                                    True
 
-                accountsTree =
-                    Tree.toTree rootsFilter childrenFilter accounts
+                        childrenFilter parentAccount account =
+                            case account.parentId of
+                                Just id ->
+                                    id == parentAccount.id
 
-                newAppState =
-                    { appState | accountsDict = accountsDict, accountsTree = accountsTree }
-            in
-            ( { model | appState = newAppState }, Cmd.none )
+                                Nothing ->
+                                    False
 
-        ( ReceiveAccounts (Err error), _ ) ->
-            let
-                newAppState =
-                    { appState | lastError = Utils.httpErrorString error }
-            in
-            ( { model | appState = newAppState }, Cmd.none )
+                        accountsTree =
+                            Tree.toTree rootsFilter childrenFilter accounts
 
-        ( IndexMsg (Page.Index.OpenAccount account), IndexPage _ ) ->
-            let
-                ( newPageModel, newPageCmd ) =
-                    Page.Account.init appState account
-            in
-            ( { model | currentPage = AccountPage newPageModel }
-            , Cmd.map AccountMsg newPageCmd
-            )
+                        newAppState =
+                            { serverUrl = "http://localhost:4000" -- TODO
+                            , accountsDict = accountsDict
+                            , accountsTree = accountsTree
+                            }
+                    in
+                    nextPage |> resolveNextPage newAppState
 
-        ( AccountMsg pageMsg, AccountPage pageModel ) ->
-            let
-                ( newPageModel, newPageCmd ) =
-                    Page.Account.update appState pageMsg pageModel
-            in
-            ( { model | currentPage = AccountPage newPageModel }
-            , Cmd.map AccountMsg newPageCmd
-            )
+                ReceiveAccounts (Err error) ->
+                    ( Failure <| Utils.httpErrorString error, Cmd.none )
 
-        ( _, _ ) ->
+                _ ->
+                    ( model, Cmd.none )
+
+        Failure _ ->
             ( model, Cmd.none )
+
+
+resolveNextPage : AppState -> NextPage -> ( Model, Cmd Msg )
+resolveNextPage appState nextPage =
+    case nextPage of
+        NextIndexPage ->
+            let
+                ( pageModel, cmd ) =
+                    Page.Index.init
+            in
+            ( Loaded { appState = appState, currentPage = IndexPage pageModel }, Cmd.map IndexMsg cmd )
+
+        NextAccountPage accountId ->
+            appState.accountsDict
+                |> Dict.get accountId
+                |> Maybe.map
+                    (\account ->
+                        let
+                            ( pageModel, cmd ) =
+                                Page.Account.init appState account
+                        in
+                        ( Loaded { appState = appState, currentPage = AccountPage pageModel }, Cmd.map AccountMsg cmd )
+                    )
+                |> Maybe.withDefault ( Failure "No such account", Cmd.none )
+
+
+send : msg -> Cmd msg
+send msg =
+    Task.succeed msg
+        |> Task.perform identity
 
 
 
@@ -171,19 +195,22 @@ update msg ({ appState, currentPage } as model) =
 
 view : Model -> Html.Html Msg
 view model =
-    let
-        appState =
-            model.appState
+    (case model of
+        Loading _ ->
+            Element.text "Loading..."
 
-        pageView =
-            case model.currentPage of
+        Loaded loadedModel ->
+            case loadedModel.currentPage of
                 IndexPage pageModel ->
-                    Page.Index.view appState pageModel |> Element.map IndexMsg
+                    Page.Index.view loadedModel.appState pageModel |> Element.map IndexMsg
 
                 AccountPage pageModel ->
-                    Page.Account.view appState pageModel |> Element.map AccountMsg
-    in
-    Element.layout [] pageView
+                    Page.Account.view loadedModel.appState pageModel |> Element.map AccountMsg
+
+        Failure error ->
+            Element.text error
+    )
+        |> Element.layout []
 
 
 
