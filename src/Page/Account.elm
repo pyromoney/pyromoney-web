@@ -24,11 +24,12 @@ type alias Model =
     }
 
 
+type alias Config a =
+    { a | serverUrl : ServerUrl }
+
+
 type alias AppState a =
-    { a
-        | serverUrl : ServerUrl
-        , accountsDict : Dict AccountId Account
-    }
+    { a | accountsDict : Dict AccountId Account }
 
 
 type alias ServerUrl =
@@ -39,8 +40,8 @@ type alias AccountId =
     String
 
 
-init : AppState a -> Account -> ( Model, Cmd Msg )
-init { serverUrl, accountsDict } account =
+init : Config a -> AppState b -> Account -> ( Model, Cmd Msg )
+init { serverUrl } { accountsDict } account =
     ( { account = account
       , ledgerEntries = []
       , lastError = ""
@@ -62,8 +63,8 @@ fetchLedgerEntries serverUrl accountsDict account =
         }
 
 
-update : AppState a -> Msg -> Model -> ( Model, Cmd Msg )
-update { serverUrl, accountsDict } msg model =
+update : Config a -> AppState b -> Msg -> Model -> ( Model, Cmd Msg )
+update { serverUrl } { accountsDict } msg model =
     case msg of
         RequestLedgerEntries account ->
             ( model, fetchLedgerEntries serverUrl accountsDict account )

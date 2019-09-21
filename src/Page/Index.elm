@@ -3,6 +3,7 @@ module Page.Index exposing (Model, Msg(..), init, view)
 import Data.Account exposing (Account, Type(..))
 import Element exposing (..)
 import Element.Events exposing (onClick)
+import Routes
 import Tree
 
 
@@ -41,12 +42,13 @@ viewAccount depth node =
 
         style =
             [ paddingEach { left = 20 * depth, right = 0, top = 0, bottom = 0 }
-            , pointer
-            , onClick (OpenAccount account)
             ]
+
+        url =
+            Routes.accountPath account.id
     in
     row [ width fill ]
-        [ column [ width (fillPortion 6) ] [ el style (text account.name) ]
+        [ column [ width (fillPortion 6) ] [ link style { url = url, label = text account.name } ]
         , column [ width (fillPortion 2) ] [ el [] (text (viewType account)) ]
         , column [ width (fillPortion 2) ] [ el [] (text account.currency) ]
         ]
