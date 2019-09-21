@@ -266,13 +266,13 @@ viewLedgerEntry appState { timezone } (Editable state ledgerEntry) =
             , textEdit modifiedEntry.description (ChangeLedgerEntryDescription id)
             , case modifiedEntry.otherSplit of
                 SingleSplit { amount } ->
-                    textEdit amount <| ChangeLedgerEntryOtherSplitAmount modifiedEntry.transactionId
+                    textEdit amount <| ChangeLedgerEntryOtherSplitAmount id
 
                 MultipleSplits ->
                     text "Split transaction"
             , case modifiedEntry.otherSplit of
                 SingleSplit _ ->
-                    textEdit modifiedEntry.ownSplitAmount <| ChangeLedgerEntryOwnSplitAmount modifiedEntry.transactionId
+                    textEdit modifiedEntry.ownSplitAmount <| ChangeLedgerEntryOwnSplitAmount id
 
                 MultipleSplits ->
                     text "Split transaction"
