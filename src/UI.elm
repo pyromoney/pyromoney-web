@@ -10,16 +10,27 @@ import Tree
 
 accountSelect : Tree.Multitree Account -> Maybe AccountId -> (AccountId -> msg) -> Element msg
 accountSelect accountsTree maybeAccountId msg =
+    let
+        noSelection =
+            accountOption "" "(none)" <| (maybeAccountId == Nothing)
+    in
     select [ onInput msg ]
-        (accountsTree
-            |> Tree.toList
-            |> List.map
-                (\{ id, name } ->
-                    option
-                        [ value id
-                        , selected <| Just id == maybeAccountId
-                        ]
-                        [ text name ]
-                )
+        (noSelection
+            :: (accountsTree
+                    |> Tree.toList
+                    |> List.map
+                        (\{ id, name } ->
+                            accountOption id name <| Just id == maybeAccountId
+                        )
+               )
         )
         |> html
+
+
+accountOption : AccountId -> String -> Bool -> Html.Html msg
+accountOption id name isSelected =
+    option
+        [ value id
+        , selected isSelected
+        ]
+        [ text name ]

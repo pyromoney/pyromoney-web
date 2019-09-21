@@ -179,7 +179,7 @@ ensureNewLedgerEntry model =
                 |> Maybe.withDefault (Editable.fromNew makeLedgerEntry)
     in
     { model
-        | ledgerEntries = newEntry :: rest
+        | ledgerEntries = rest ++ [ newEntry ]
     }
 
 
