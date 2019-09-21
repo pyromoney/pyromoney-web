@@ -45,13 +45,12 @@ viewAccount depth node =
             , onClick (OpenAccount account)
             ]
     in
-    [ row [ width fill ]
+    row [ width fill ]
         [ column [ width (fillPortion 6) ] [ el style (text account.name) ]
         , column [ width (fillPortion 2) ] [ el [] (text (viewType account)) ]
         , column [ width (fillPortion 2) ] [ el [] (text account.currency) ]
         ]
-    ]
-        ++ viewAccounts (depth + 1) childNodes
+        :: viewAccounts (depth + 1) childNodes
 
 
 viewType : Account -> String
