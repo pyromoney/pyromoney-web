@@ -22,6 +22,8 @@ type Msg
     | EditLedgerEntry TransactionId
       -- TODO: Use lens?
     | ChangeLedgerEntryDescription TransactionId String
+    | ChangeLedgerEntryOtherSplitAmount TransactionId String
+    | ChangeLedgerEntryOwnSplitAmount TransactionId String
 
 
 
@@ -38,6 +40,7 @@ type alias Model =
 
 type alias Config a =
     { a | serverUrl : ServerUrl }
+
 
 type alias LedgerEntryForm =
     { timestamp : Time.Posix
@@ -90,35 +93,55 @@ fetchLedgerEntries serverUrl accountsDict account =
         }
 
 
-update : Config a -> AppState b -> Msg -> Model -> ( Model, Cmd Msg )
-update { serverUrl } { accountsDict } msg model =
-editLedgerEntry : TransactionId -> Model -> Model
-editLedgerEntry transactionId model =
-    { model
-        | ledgerEntries =
-            model.ledgerEntries
-                |> LE.updateIf (eqTransactionId transactionId)
-                    Editable.edit
-    }
-
-
-setLedgerEntryDescription : TransactionId -> String -> Model -> Model
-setLedgerEntryDescription transactionId newDescription model =
-    { model
-        | ledgerEntries =
-            model.ledgerEntries
-                |> LE.updateIf (eqTransactionId transactionId)
-                    (Editable.mapTarget
-                        (\entry ->
-                            { entry | description = FormValue.fromString newDescription }
-                        )
-                    )
-    }
-
-
 eqTransactionId : TransactionId -> Editable LedgerEntryForm -> Bool
 eqTransactionId id =
     (==) id << .transactionId << Editable.target
+
+
+updateLedgerEntry : TransactionId -> (Editable LedgerEntryForm -> Editable LedgerEntryForm) -> Model -> Model
+updateLedgerEntry transactionId f model =
+    { model
+        | ledgerEntries =
+            model.ledgerEntries
+                |> LE.updateIf (eqTransactionId transactionId) f
+    }
+
+
+editLedgerEntry : TransactionId -> Model -> Model
+editLedgerEntry transactionId =
+    updateLedgerEntry transactionId Editable.edit
+
+
+setLedgerEntryDescription : TransactionId -> String -> Model -> Model
+setLedgerEntryDescription transactionId newDescription =
+    updateLedgerEntry transactionId <|
+        Editable.mapTarget
+            (\entry ->
+                { entry | description = FormValue.fromString newDescription }
+            )
+
+
+setLedgerEntryOwnSplitAmount : TransactionId -> String -> Model -> Model
+setLedgerEntryOwnSplitAmount transactionId newAmount =
+    updateLedgerEntry transactionId <|
+        Editable.mapTarget
+            (\entry ->
+                { entry | ownSplitAmount = FormValue.parseFloat newAmount }
+            )
+
+
+setLedgerEntryOtherSplitAmount : TransactionId -> String -> Model -> Model
+setLedgerEntryOtherSplitAmount transactionId newAmount =
+    updateLedgerEntry transactionId <|
+        Editable.mapTarget
+            (\({ otherSplit } as entry) ->
+                case otherSplit of
+                    SingleSplit _ ->
+                        { entry | otherSplit = SingleSplit { amount = FormValue.parseFloat newAmount } }
+
+                    MultipleSplits ->
+                        entry
+            )
 
 
 toForm : LedgerEntry -> LedgerEntryForm
@@ -139,8 +162,8 @@ toForm { transaction, split, otherSplits } =
     }
 
 
-update : AppState a -> Msg -> Model -> ( Model, Cmd Msg )
-update { serverUrl, accountsDict } msg model =
+update : Config a -> AppState b -> Msg -> Model -> ( Model, Cmd Msg )
+update { serverUrl } { accountsDict } msg model =
     case msg of
         RequestLedgerEntries account ->
             ( model
@@ -171,6 +194,16 @@ update { serverUrl, accountsDict } msg model =
             , Cmd.none
             )
 
+        ChangeLedgerEntryOwnSplitAmount transactionId newAmount ->
+            ( model |> setLedgerEntryOwnSplitAmount transactionId newAmount
+            , Cmd.none
+            )
+
+        ChangeLedgerEntryOtherSplitAmount transactionId newAmount ->
+            ( model |> setLedgerEntryOtherSplitAmount transactionId newAmount
+            , Cmd.none
+            )
+
 
 view : AppState a -> Model -> Element Msg
 view appState model =
@@ -190,7 +223,6 @@ viewLedgerEntries appState model =
         -- , text "Transfer"
         , text "Own split"
         , text "Other split"
-        , text "Balance"
         ]
         :: List.map (viewLedgerEntry appState model) model.ledgerEntries
 
@@ -225,7 +257,6 @@ viewLedgerEntry appState { timezone } (Editable state ledgerEntry) =
 
                 MultipleSplits ->
                     text "Split transaction"
-            , text (ledgerEntry.ownSplitAmount |> FormValue.toString)
             ]
                 |> List.map (makeEditable <| EditLedgerEntry id)
                 |> ledgerRow
@@ -236,11 +267,18 @@ viewLedgerEntry appState { timezone } (Editable state ledgerEntry) =
         Editable.Editing modifiedEntry ->
             [ viewTimestamp timezone ledgerEntry.timestamp
             , textEdit modifiedEntry.description (ChangeLedgerEntryDescription id)
-            , text "TODO"
+            , case modifiedEntry.otherSplit of
+                SingleSplit { amount } ->
+                    textEdit amount <| ChangeLedgerEntryOtherSplitAmount modifiedEntry.transactionId
 
-            -- , textEdit String.fromFloat modifiedEntry.split.amount ChangeLedgerEntrySplitAmount
-            , text "TODO"
-            , text "TODO"
+                MultipleSplits ->
+                    text "Split transaction"
+            , case modifiedEntry.otherSplit of
+                SingleSplit _ ->
+                    textEdit modifiedEntry.ownSplitAmount <| ChangeLedgerEntryOwnSplitAmount modifiedEntry.transactionId
+
+                MultipleSplits ->
+                    text "Split transaction"
             ]
                 |> ledgerRow
 

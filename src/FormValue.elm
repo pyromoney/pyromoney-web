@@ -1,4 +1,4 @@
-module FormValue exposing (FormValue(..), fromFloat, fromString, toFloat, toString)
+module FormValue exposing (FormValue(..), fromFloat, fromString, parseFloat, toFloat, toString)
 
 
 type FormValue a
@@ -34,3 +34,10 @@ toFloat value =
 
         Valid f _ ->
             Just f
+
+
+parseFloat : String -> FormValue Float
+parseFloat str =
+    String.toFloat str
+        |> Maybe.map (\f -> Valid f str)
+        |> Maybe.withDefault (Invalid str)
