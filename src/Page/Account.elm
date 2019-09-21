@@ -43,9 +43,16 @@ type alias LedgerEntryForm =
     { timestamp : Time.Posix
     , transactionId : TransactionId
     , description : FormValue String
-    , splitAmount : FormValue Float
-    , otherSplitAmounts : List (FormValue Float)
+    , ownSplitAmount : FormValue Float
+    , otherSplit : OtherSplit
     }
+
+
+type OtherSplit
+    = SingleSplit
+        { amount : FormValue Float
+        }
+    | MultipleSplits
 
 
 type alias AppState a =
@@ -119,8 +126,16 @@ toForm { transaction, split, otherSplits } =
     { timestamp = transaction.timestamp
     , transactionId = transaction.id
     , description = transaction.description |> FormValue.fromString
-    , splitAmount = split.amount |> FormValue.fromFloat
-    , otherSplitAmounts = otherSplits |> List.map (FormValue.fromFloat << .amount)
+    , ownSplitAmount = split.amount |> FormValue.fromFloat
+    , otherSplit =
+        case otherSplits of
+            [ otherSplit ] ->
+                SingleSplit
+                    { amount = otherSplit.amount |> FormValue.fromFloat
+                    }
+
+            _ ->
+                MultipleSplits
     }
 
 
@@ -203,14 +218,14 @@ viewLedgerEntry appState { timezone } (Editable state ledgerEntry) =
         Editable.Saved ->
             [ viewTimestamp timezone ledgerEntry.timestamp
             , text (ledgerEntry.description |> FormValue.toString)
-            , viewSplitAmount ledgerEntry.splitAmount
-            , case ledgerEntry.otherSplitAmounts of
-                [ split ] ->
-                    viewSplitAmount split
+            , viewSplitAmount ledgerEntry.ownSplitAmount
+            , case ledgerEntry.otherSplit of
+                SingleSplit { amount } ->
+                    viewSplitAmount amount
 
-                _ ->
+                MultipleSplits ->
                     text "Split transaction"
-            , text (ledgerEntry.splitAmount |> FormValue.toString)
+            , text (ledgerEntry.ownSplitAmount |> FormValue.toString)
             ]
                 |> List.map (makeEditable <| EditLedgerEntry id)
                 |> ledgerRow
@@ -241,8 +256,8 @@ textEdit value msg =
 
 
 viewSplitAmount : FormValue Float -> Element Msg
-viewSplitAmount splitAmount =
-    splitAmount
+viewSplitAmount ownSplitAmount =
+    ownSplitAmount
         |> FormValue.toFloat
         |> Maybe.andThen
             (\amount ->
