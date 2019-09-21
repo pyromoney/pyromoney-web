@@ -43,8 +43,7 @@ type alias AccountId =
 
 
 type alias AppState =
-    { serverUrl : ServerUrl
-    , accountsDict : Dict AccountId Account
+    { accountsDict : Dict AccountId Account
     , accountsTree : Tree.Multitree Account
     }
 
@@ -130,7 +129,7 @@ update msg ({ config, state } as model) =
                 ( IndexMsg (Page.Index.OpenAccount account), IndexPage _ ) ->
                     let
                         ( newPageModel, newPageCmd ) =
-                            Page.Account.init appState account
+                            Page.Account.init config appState account
 
                         newState =
                             Loaded { loadedModel | currentPage = AccountPage newPageModel }
@@ -142,7 +141,7 @@ update msg ({ config, state } as model) =
                 ( AccountMsg pageMsg, AccountPage pageModel ) ->
                     let
                         ( newPageModel, newPageCmd ) =
-                            Page.Account.update appState pageMsg pageModel
+                            Page.Account.update config appState pageMsg pageModel
 
                         newState =
                             Loaded { loadedModel | currentPage = AccountPage newPageModel }
@@ -183,8 +182,7 @@ update msg ({ config, state } as model) =
                             Tree.toTree rootsFilter childrenFilter accounts
 
                         newAppState =
-                            { serverUrl = "http://localhost:4000" -- TODO
-                            , accountsDict = accountsDict
+                            { accountsDict = accountsDict
                             , accountsTree = accountsTree
                             }
                     in
@@ -224,7 +222,7 @@ resolveRoute config appState route =
                     (\account ->
                         let
                             ( pageModel, cmd ) =
-                                Page.Account.init appState account
+                                Page.Account.init config appState account
 
                             newState =
                                 Loaded { appState = appState, currentPage = AccountPage pageModel }
