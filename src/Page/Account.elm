@@ -14,6 +14,7 @@ import Json.Decode as Decode
 import List.Extra as LE
 import Time
 import Tree
+import UI exposing (accountSelect)
 import Utils
 
 
@@ -25,6 +26,7 @@ type Msg
     | ChangeLedgerEntryDescription TransactionId String
     | ChangeLedgerEntryOtherSplitAmount TransactionId String
     | ChangeLedgerEntryOwnSplitAmount TransactionId String
+    | ChangeLedgerEntryAccount TransactionId AccountId
 
 
 
@@ -55,12 +57,16 @@ type alias LedgerEntryForm =
 type OtherSplit
     = SingleSplit
         { amount : FormValue Float
+        , accountId : AccountId
         }
     | MultipleSplits
 
 
 type alias AppState a =
-    { a | accountsDict : Dict AccountId Account }
+    { a
+        | accountsDict : Dict AccountId Account
+        , accountsTree : Tree.Multitree Account
+    }
 
 
 type alias ServerUrl =
@@ -105,8 +111,13 @@ updateLedgerEntry transactionId f model =
 
 
 editLedgerEntry : TransactionId -> Model -> Model
-editLedgerEntry transactionId =
-    updateLedgerEntry transactionId Editable.edit
+editLedgerEntry transactionId model =
+    { model
+        | ledgerEntries =
+            model.ledgerEntries
+                |> List.map Editable.cancel
+    }
+        |> updateLedgerEntry transactionId Editable.edit
 
 
 setLedgerEntryDescription : TransactionId -> String -> Model -> Model
@@ -131,10 +142,24 @@ setLedgerEntryOtherSplitAmount : TransactionId -> String -> Model -> Model
 setLedgerEntryOtherSplitAmount transactionId newAmount =
     updateLedgerEntry transactionId <|
         Editable.mapTarget
-            (\({ otherSplit } as entry) ->
-                case otherSplit of
-                    SingleSplit _ ->
-                        { entry | otherSplit = SingleSplit { amount = FormValue.parseFloat newAmount } }
+            (\entry ->
+                case entry.otherSplit of
+                    SingleSplit otherSplit ->
+                        { entry | otherSplit = SingleSplit { otherSplit | amount = FormValue.parseFloat newAmount } }
+
+                    MultipleSplits ->
+                        entry
+            )
+
+
+setLedgerEntryAccount : TransactionId -> AccountId -> Model -> Model
+setLedgerEntryAccount transactionId accountId =
+    updateLedgerEntry transactionId <|
+        Editable.mapTarget
+            (\entry ->
+                case entry.otherSplit of
+                    SingleSplit otherSplit ->
+                        { entry | otherSplit = SingleSplit { otherSplit | accountId = accountId } }
 
                     MultipleSplits ->
                         entry
@@ -151,7 +176,8 @@ toForm { transaction, split, otherSplits } =
         case otherSplits of
             [ otherSplit ] ->
                 SingleSplit
-                    { amount = otherSplit.amount |> FormValue.fromFloat
+                    { accountId = otherSplit.account.id
+                    , amount = otherSplit.amount |> FormValue.fromFloat
                     }
 
             _ ->
@@ -201,6 +227,9 @@ update { serverUrl } { accountsDict } msg model =
             , Cmd.none
             )
 
+        ChangeLedgerEntryAccount transactionId accountId ->
+            ( model |> setLedgerEntryAccount transactionId accountId, Cmd.none )
+
 
 view : AppState a -> Model -> Element Msg
 view appState model =
@@ -216,8 +245,7 @@ viewLedgerEntries appState model =
     ledgerRow
         [ text "Date"
         , text "Description"
-
-        -- , text "Transfer"
+        , text "Transfer"
         , text "Own split"
         , text "Other split"
         ]
@@ -238,7 +266,7 @@ ledgerRow cols =
 
 
 viewLedgerEntry : AppState a -> Model -> Editable LedgerEntryForm -> Element Msg
-viewLedgerEntry appState { timezone } (Editable state ledgerEntry) =
+viewLedgerEntry { accountsTree, accountsDict } { timezone } (Editable state ledgerEntry) =
     let
         id =
             ledgerEntry.transactionId
@@ -247,6 +275,15 @@ viewLedgerEntry appState { timezone } (Editable state ledgerEntry) =
         Editable.Saved ->
             [ viewTimestamp timezone ledgerEntry.timestamp
             , text (ledgerEntry.description |> FormValue.toString)
+            , case ledgerEntry.otherSplit of
+                SingleSplit { accountId } ->
+                    accountsDict
+                        |> Dict.get accountId
+                        |> Maybe.map (text << .name)
+                        |> Maybe.withDefault (text "No such account")
+
+                MultipleSplits ->
+                    text "Split transaction"
             , viewSplitAmount ledgerEntry.ownSplitAmount
             , case ledgerEntry.otherSplit of
                 SingleSplit { amount } ->
@@ -264,6 +301,13 @@ viewLedgerEntry appState { timezone } (Editable state ledgerEntry) =
         Editable.Editing modifiedEntry ->
             [ viewTimestamp timezone ledgerEntry.timestamp
             , textEdit modifiedEntry.description (ChangeLedgerEntryDescription id)
+            , case ledgerEntry.otherSplit of
+                SingleSplit _ ->
+                    -- TODO: Take accountId from SingleSplit
+                    accountSelect accountsTree Nothing <| ChangeLedgerEntryAccount id
+
+                MultipleSplits ->
+                    text "Split transaction"
             , case modifiedEntry.otherSplit of
                 SingleSplit { amount } ->
                     textEdit amount <| ChangeLedgerEntryOtherSplitAmount id
