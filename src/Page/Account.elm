@@ -280,7 +280,7 @@ viewLedgerEntry { accountsTree, accountsDict } { timezone } (Editable state ledg
                     accountsDict
                         |> Dict.get accountId
                         |> Maybe.map (text << .name)
-                        |> Maybe.withDefault (text "No such account")
+                        |> Maybe.withDefault (text "")
 
                 MultipleSplits ->
                     text "Split transaction"

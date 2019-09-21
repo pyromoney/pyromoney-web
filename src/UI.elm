@@ -11,10 +11,15 @@ import Tree
 accountSelect : Tree.Multitree Account -> Maybe AccountId -> (AccountId -> msg) -> Element msg
 accountSelect accountsTree maybeAccountId msg =
     select [ onInput msg ]
-        [ option
-            [ value "account-id"
-            , selected True
-            ]
-            [ text "Some account" ]
-        ]
+        (accountsTree
+            |> Tree.toList
+            |> List.map
+                (\{ id, name } ->
+                    option
+                        [ value id
+                        , selected <| Just id == maybeAccountId
+                        ]
+                        [ text name ]
+                )
+        )
         |> html

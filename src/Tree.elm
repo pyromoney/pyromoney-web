@@ -1,4 +1,4 @@
-module Tree exposing (Multitree, Node(..), empty, toTree)
+module Tree exposing (Multitree, Node(..), empty, toList, toTree)
 
 
 type Node a
@@ -32,3 +32,13 @@ toTree rootsFilter childrenFilter items =
 empty : Multitree a
 empty =
     []
+
+
+nodeToList : Node a -> List a
+nodeToList (Node val children) =
+    val :: List.concatMap nodeToList children
+
+
+toList : Multitree a -> List a
+toList nodes =
+    List.concatMap nodeToList nodes
