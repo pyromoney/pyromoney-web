@@ -1,6 +1,7 @@
 module Main exposing (Model, Msg(..), init, main, update, view)
 
 import Browser
+import Browser.Navigation as Nav
 import Data.Account exposing (Account, decodeAccount)
 import Dict exposing (Dict)
 import Element
@@ -10,7 +11,9 @@ import Json.Decode as Decode
 import Loadable exposing (Loadable(..))
 import Page.Account
 import Page.Index
+import Routes exposing (Route(..))
 import Tree
+import Url exposing (Url)
 import Utils
 
 
@@ -24,7 +27,9 @@ type Page
 
 
 type Msg
-    = ReceiveAccounts (Result Http.Error (List Account))
+    = OnUrlChange Url
+    | OnUrlRequest Browser.UrlRequest
+    | ReceiveAccounts (Result Http.Error (List Account))
     | IndexMsg Page.Index.Msg
     | AccountMsg Page.Account.Msg
 
@@ -44,17 +49,24 @@ type alias AppState =
     }
 
 
-type NextPage
-    = NextIndexPage
-    | NextAccountPage AccountId
+type alias Config =
+    { navKey : Nav.Key
+    , serverUrl : ServerUrl
+    }
 
 
-type alias Model =
+type alias State =
     Loadable
         { appState : AppState
         , currentPage : Page
         }
-        NextPage
+        Route
+
+
+type alias Model =
+    { config : Config
+    , state : State
+    }
 
 
 type alias Flags =
@@ -62,9 +74,15 @@ type alias Flags =
     }
 
 
-init : Flags -> ( Model, Cmd Msg )
-init flags =
-    ( Loading NextIndexPage
+init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
+init flags url navKey =
+    ( { config =
+            { navKey = navKey
+            , serverUrl = flags.serverUrl
+            }
+      , state =
+            Loading (Routes.parseUrl url)
+      }
     , fetchAccounts flags.serverUrl
     )
 
@@ -86,16 +104,38 @@ fetchAccounts serverUrl =
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
-    case model of
+update msg ({ config, state } as model) =
+    case state of
         Loaded ({ appState, currentPage } as loadedModel) ->
             case ( msg, currentPage ) of
+                ( OnUrlRequest urlRequest, _ ) ->
+                    case urlRequest of
+                        Browser.Internal url ->
+                            ( model
+                            , Nav.pushUrl config.navKey (Url.toString url)
+                            )
+
+                        Browser.External url ->
+                            ( model
+                            , Nav.load url
+                            )
+
+                ( OnUrlChange url, _ ) ->
+                    let
+                        newRoute =
+                            Routes.parseUrl url
+                    in
+                    resolveRoute config appState newRoute
+
                 ( IndexMsg (Page.Index.OpenAccount account), IndexPage _ ) ->
                     let
                         ( newPageModel, newPageCmd ) =
                             Page.Account.init appState account
+
+                        newState =
+                            Loaded { loadedModel | currentPage = AccountPage newPageModel }
                     in
-                    ( Loaded { loadedModel | currentPage = AccountPage newPageModel }
+                    ( { config = config, state = newState }
                     , Cmd.map AccountMsg newPageCmd
                     )
 
@@ -103,15 +143,18 @@ update msg model =
                     let
                         ( newPageModel, newPageCmd ) =
                             Page.Account.update appState pageMsg pageModel
+
+                        newState =
+                            Loaded { loadedModel | currentPage = AccountPage newPageModel }
                     in
-                    ( Loaded { loadedModel | currentPage = AccountPage newPageModel }
+                    ( { config = config, state = newState }
                     , Cmd.map AccountMsg newPageCmd
                     )
 
                 ( _, _ ) ->
                     ( model, Cmd.none )
 
-        Loading nextPage ->
+        Loading route ->
             case msg of
                 ReceiveAccounts (Ok accounts) ->
                     let
@@ -145,10 +188,14 @@ update msg model =
                             , accountsTree = accountsTree
                             }
                     in
-                    nextPage |> resolveNextPage newAppState
+                    resolveRoute config newAppState route
 
                 ReceiveAccounts (Err error) ->
-                    ( Failure <| Utils.httpErrorString error, Cmd.none )
+                    let
+                        newState =
+                            Failure <| Utils.httpErrorString error
+                    in
+                    ( { config = config, state = newState }, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )
@@ -157,17 +204,20 @@ update msg model =
             ( model, Cmd.none )
 
 
-resolveNextPage : AppState -> NextPage -> ( Model, Cmd Msg )
-resolveNextPage appState nextPage =
-    case nextPage of
-        NextIndexPage ->
+resolveRoute : Config -> AppState -> Route -> ( Model, Cmd Msg )
+resolveRoute config appState route =
+    case route of
+        IndexRoute ->
             let
                 ( pageModel, cmd ) =
                     Page.Index.init
-            in
-            ( Loaded { appState = appState, currentPage = IndexPage pageModel }, Cmd.map IndexMsg cmd )
 
-        NextAccountPage accountId ->
+                newState =
+                    Loaded { appState = appState, currentPage = IndexPage pageModel }
+            in
+            ( { config = config, state = newState }, Cmd.map IndexMsg cmd )
+
+        AccountRoute accountId ->
             appState.accountsDict
                 |> Dict.get accountId
                 |> Maybe.map
@@ -175,19 +225,36 @@ resolveNextPage appState nextPage =
                         let
                             ( pageModel, cmd ) =
                                 Page.Account.init appState account
+
+                            newState =
+                                Loaded { appState = appState, currentPage = AccountPage pageModel }
                         in
-                        ( Loaded { appState = appState, currentPage = AccountPage pageModel }, Cmd.map AccountMsg cmd )
+                        ( { config = config, state = newState }, Cmd.map AccountMsg cmd )
                     )
-                |> Maybe.withDefault ( Failure "No such account", Cmd.none )
+                |> Maybe.withDefault ( { config = config, state = Failure "No such account" }, Cmd.none )
+
+        NotFoundRoute ->
+            ( { config = config
+              , state = Failure "Not found"
+              }
+            , Cmd.none
+            )
 
 
 
 ---- VIEW ----
 
 
-view : Model -> Html.Html Msg
+view : Model -> Browser.Document Msg
 view model =
-    (case model of
+    { title = "Pyromoney"
+    , body = [ viewCurrentPage model ]
+    }
+
+
+viewCurrentPage : Model -> Html.Html Msg
+viewCurrentPage { state } =
+    (case state of
         Loading _ ->
             Element.text "Loading..."
 
@@ -211,9 +278,11 @@ view model =
 
 main : Program Flags Model Msg
 main =
-    Browser.element
+    Browser.application
         { view = view
         , init = init
         , update = update
         , subscriptions = always Sub.none
+        , onUrlRequest = OnUrlRequest
+        , onUrlChange = OnUrlChange
         }
