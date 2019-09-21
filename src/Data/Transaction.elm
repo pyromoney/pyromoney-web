@@ -1,4 +1,4 @@
-module Data.Transaction exposing (LedgerEntry, Split, Transaction, decodeLedgerEntry, decodeSplit, decodeTransaction)
+module Data.Transaction exposing (LedgerEntry, Split, Transaction, TransactionId, decodeLedgerEntry, decodeSplit, decodeTransaction, setDescription)
 
 import Data.Account exposing (Account)
 import Dict exposing (Dict)
@@ -62,6 +62,11 @@ type alias SplitId =
 
 type alias AccountId =
     String
+
+
+setDescription : String -> Transaction -> Transaction
+setDescription newDescription transaction =
+    { transaction | description = newDescription }
 
 
 decodeTransaction : Dict AccountId Account -> Decode.Decoder Transaction
