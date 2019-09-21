@@ -25,7 +25,10 @@ type alias Model =
 
 
 type alias AppState a =
-    { a | serverUrl : ServerUrl, accountsDict : Dict AccountId Account }
+    { a
+        | serverUrl : ServerUrl
+        , accountsDict : Dict AccountId Account
+    }
 
 
 type alias ServerUrl =

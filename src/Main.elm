@@ -7,11 +7,9 @@ import Element
 import Html
 import Http
 import Json.Decode as Decode
-import Json.Encode as Encode
 import Loadable exposing (Loadable(..))
 import Page.Account
 import Page.Index
-import Task
 import Tree
 import Utils
 
@@ -181,12 +179,6 @@ resolveNextPage appState nextPage =
                         ( Loaded { appState = appState, currentPage = AccountPage pageModel }, Cmd.map AccountMsg cmd )
                     )
                 |> Maybe.withDefault ( Failure "No such account", Cmd.none )
-
-
-send : msg -> Cmd msg
-send msg =
-    Task.succeed msg
-        |> Task.perform identity
 
 
 
