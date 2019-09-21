@@ -1,4 +1,4 @@
-module Data.Account exposing (Account, Type(..), decodeAccount)
+module Data.Account exposing (Account, AccountId, Type(..), decodeAccount)
 
 import Json.Decode as Decode
 import Json.Decode.Pipeline exposing (required)

@@ -1,11 +1,11 @@
 module Page.Account exposing (Model, Msg(..), init, update, view)
 
-import Data.Account exposing (Account)
+import Data.Account exposing (Account, AccountId)
 import Data.Transaction as Transaction exposing (LedgerEntry, TransactionId, decodeLedgerEntry)
 import DateFormat
 import Dict exposing (Dict)
 import Editable exposing (Editable(..))
-import Element exposing (Element, column, el, fill, fillPortion, row, text, width)
+import Element exposing (Element, column, el, fill, fillPortion, html, row, text, width)
 import Element.Events exposing (onClick)
 import Element.Input as Input exposing (labelHidden)
 import FormValue exposing (FormValue(..))
@@ -13,6 +13,7 @@ import Http
 import Json.Decode as Decode
 import List.Extra as LE
 import Time
+import Tree
 import Utils
 
 
@@ -63,10 +64,6 @@ type alias AppState a =
 
 
 type alias ServerUrl =
-    String
-
-
-type alias AccountId =
     String
 
 
