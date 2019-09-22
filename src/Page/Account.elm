@@ -7,7 +7,7 @@ import DateFormat
 import DatePicker exposing (DatePicker)
 import Dict exposing (Dict)
 import Editable exposing (Editable(..))
-import Element exposing (Attribute, Element, column, el, fill, fillPortion, height, html, inFront, rgba, row, shrink, text, width)
+import Element exposing (Attribute, Element, column, el, fill, fillPortion, height, html, inFront, paragraph, rgba, row, shrink, text, width)
 import Element.Background as Background
 import Element.Events exposing (onClick)
 import Element.Input as Input exposing (focusedOnLoad)
@@ -440,7 +440,7 @@ viewSavedEntryRow accountsDict timezone ledgerEntry =
             el [ onClick msg ] content
     in
     [ viewTimestamp [] timezone ledgerEntry.timestamp
-    , text (ledgerEntry.description |> FormValue.toString)
+    , paragraph [] [ text (ledgerEntry.description |> FormValue.toString) ]
     , viewIfSingleSplit ledgerEntry <|
         \{ accountId } ->
             accountsDict
