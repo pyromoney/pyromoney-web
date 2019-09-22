@@ -1,6 +1,10 @@
-module Utils exposing (httpErrorString)
+module Utils exposing (httpErrorString, send)
+
+{-| Assorted helper functions.
+-}
 
 import Http
+import Task
 
 
 httpErrorString : Http.Error -> String
@@ -20,3 +24,9 @@ httpErrorString error =
 
         Http.Timeout ->
             "Request timeout"
+
+
+send : msg -> Cmd msg
+send msg =
+    Task.succeed msg
+        |> Task.perform identity

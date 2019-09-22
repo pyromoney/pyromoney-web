@@ -28,6 +28,7 @@ type Msg
     | ChangeLedgerEntryOwnSplitAmount TransactionId String
     | ChangeLedgerEntryAccount TransactionId AccountId
     | SaveLedgerEntry (Editable LedgerEntryForm)
+    | SavedLedgerEntry (Result Http.Error LedgerEntryForm)
 
 
 
@@ -302,14 +303,38 @@ update { serverUrl } { accountsDict } msg model =
             , Cmd.none
             )
 
-        SaveLedgerEntry editableEntry ->
-            let
-                _ =
-                    Debug.log "SaveLedgerEntry" editableEntry
-            in
+        SaveLedgerEntry (Editable state originalEntry) ->
+            -- TODO: Do an actual HTTP request.
+            case state of
+                Editable.New ->
+                    ( model
+                    , Utils.send <| SavedLedgerEntry <| Ok originalEntry
+                    )
+
+                Editable.Saved ->
+                    -- Meh. It's probably better to handle saving entries that
+                    -- are already saved because it makes it complete and we
+                    -- avoid surprises if the unexpected happens and we start
+                    -- having a case for saving already saved items.
+                    ( model
+                    , Utils.send <| SavedLedgerEntry <| Ok originalEntry
+                    )
+
+                Editable.Editing modifiedEntry ->
+                    ( model
+                    , Utils.send <| SavedLedgerEntry <| Ok modifiedEntry
+                    )
+
+        SavedLedgerEntry (Ok ledgerEntry) ->
             ( model
+                |> updateLedgerEntry ledgerEntry.transactionId
+                    (\_ -> Editable.fromSaved ledgerEntry)
+                |> ensureNewLedgerEntry
             , Cmd.none
             )
+
+        SavedLedgerEntry (Err err) ->
+            Debug.todo "Implement flash messages?"
 
 
 
