@@ -29,6 +29,10 @@ type Msg
     | ChangeLedgerEntryAccount TransactionId AccountId
 
 
+
+-- MODEL
+
+
 type alias Model =
     { account : Account
     , ledgerEntries : List (Editable LedgerEntryForm)
@@ -67,29 +71,6 @@ type alias AppState a =
 
 type alias ServerUrl =
     String
-
-
-init : Config a -> AppState b -> Account -> ( Model, Cmd Msg )
-init { serverUrl } { accountsDict } account =
-    ( { account = account
-      , ledgerEntries = []
-      , lastError = ""
-      , timezone = Time.utc
-      }
-    , fetchLedgerEntries serverUrl accountsDict account
-    )
-
-
-fetchLedgerEntries : ServerUrl -> Dict AccountId Account -> Account -> Cmd Msg
-fetchLedgerEntries serverUrl accountsDict account =
-    let
-        decoder =
-            Decode.field "data" (Decode.list (decodeLedgerEntry accountsDict account))
-    in
-    Http.get
-        { url = serverUrl ++ "/accounts/" ++ account.id ++ "/transactions"
-        , expect = Http.expectJson ReceiveLedgerEntries decoder
-        }
 
 
 eqTransactionId : TransactionId -> Editable LedgerEntryForm -> Bool
@@ -201,8 +182,8 @@ makeLedgerEntry =
     }
 
 
-toForm : LedgerEntry -> LedgerEntryForm
-toForm { transaction, split, otherSplits } =
+ledgerEntryToForm : LedgerEntry -> LedgerEntryForm
+ledgerEntryToForm { transaction, split, otherSplits } =
     { timestamp = transaction.timestamp
     , transactionId = transaction.id
     , description = transaction.description |> FormValue.fromString
@@ -220,6 +201,37 @@ toForm { transaction, split, otherSplits } =
     }
 
 
+
+-- INIT
+
+
+init : Config a -> AppState b -> Account -> ( Model, Cmd Msg )
+init { serverUrl } { accountsDict } account =
+    ( { account = account
+      , ledgerEntries = []
+      , lastError = ""
+      , timezone = Time.utc
+      }
+    , fetchLedgerEntries serverUrl accountsDict account
+    )
+
+
+fetchLedgerEntries : ServerUrl -> Dict AccountId Account -> Account -> Cmd Msg
+fetchLedgerEntries serverUrl accountsDict account =
+    let
+        decoder =
+            Decode.field "data" (Decode.list (decodeLedgerEntry accountsDict account))
+    in
+    Http.get
+        { url = serverUrl ++ "/accounts/" ++ account.id ++ "/transactions"
+        , expect = Http.expectJson ReceiveLedgerEntries decoder
+        }
+
+
+
+-- UPDATE
+
+
 update : Config a -> AppState b -> Msg -> Model -> ( Model, Cmd Msg )
 update { serverUrl } { accountsDict } msg model =
     case msg of
@@ -232,7 +244,7 @@ update { serverUrl } { accountsDict } msg model =
             ( { model
                 | ledgerEntries =
                     ledgerEntries
-                        |> List.map (Editable.fromSaved << toForm)
+                        |> List.map (Editable.fromSaved << ledgerEntryToForm)
               }
                 |> ensureNewLedgerEntry
             , Cmd.none
@@ -267,34 +279,38 @@ update { serverUrl } { accountsDict } msg model =
             ( model |> setLedgerEntryAccount transactionId accountId, Cmd.none )
 
 
+
+-- VIEW
+
+
 view : AppState a -> Model -> Element Msg
 view appState model =
     column [ width fill ] <|
         [ el [] <| text model.lastError
         , el [] <| text model.account.name
         ]
-            ++ viewLedgerEntries appState model
+            ++ viewLedger appState model
 
 
-viewLedgerEntries : AppState a -> Model -> List (Element Msg)
-viewLedgerEntries appState model =
-    ledgerRow []
+viewLedger : AppState a -> Model -> List (Element Msg)
+viewLedger appState model =
+    viewLedgerRow []
         [ text "Date"
         , text "Description"
         , text "Transfer"
         , text "Own split"
         , text "Other split"
         ]
-        :: List.map (viewLedgerRow appState model) model.ledgerEntries
+        :: List.map (viewEntryRow appState model) model.ledgerEntries
 
 
-ledgerRow : List (Attribute Msg) -> List (Element Msg) -> Element Msg
-ledgerRow attrs cols =
+viewLedgerRow : List (Attribute Msg) -> List (Element Msg) -> Element Msg
+viewLedgerRow attrs cols =
     columnRow ([ width fill ] ++ attrs) [ 10, 40, 20, 10, 10 ] cols
 
 
-viewLedgerRow : AppState a -> Model -> Editable LedgerEntryForm -> Element Msg
-viewLedgerRow { accountsTree, accountsDict } { timezone } (Editable state ledgerEntry) =
+viewEntryRow : AppState a -> Model -> Editable LedgerEntryForm -> Element Msg
+viewEntryRow { accountsTree, accountsDict } { timezone } (Editable state ledgerEntry) =
     case state of
         Editable.Saved ->
             viewSavedEntryRow accountsDict timezone ledgerEntry
@@ -327,7 +343,7 @@ viewSavedEntryRow accountsDict timezone ledgerEntry =
             viewSplitAmount amount
     ]
         |> List.map (makeEditable <| EditLedgerEntry ledgerEntry.transactionId)
-        |> ledgerRow [ onClick <| EditLedgerEntry ledgerEntry.transactionId ]
+        |> viewLedgerRow [ onClick <| EditLedgerEntry ledgerEntry.transactionId ]
 
 
 viewEditingEntryRow : Tree.Multitree Account -> Time.Zone -> LedgerEntryForm -> Element Msg
@@ -349,7 +365,7 @@ viewEditingEntryRow accountsTree timezone ledgerEntry =
             formValueEdit [ width fill ] ledgerEntry.ownSplitAmount <|
                 ChangeLedgerEntryOwnSplitAmount ledgerEntry.transactionId
     ]
-        |> ledgerRow []
+        |> viewLedgerRow []
 
 
 viewIfSingleSplit : LedgerEntryForm -> ({ amount : FormValue Float, accountId : AccountId } -> Element Msg) -> Element Msg
