@@ -21,7 +21,7 @@ import Utils
 
 type Msg
     = RequestLedgerEntries Account
-    | ReceiveLedgerEntries (Result Http.Error (List LedgerEntry))
+    | ReceiveLedgerEntries (Result Http.Error (List LedgerEntryForm))
     | EditLedgerEntry TransactionId
     | ChangeLedgerEntryDescription TransactionId String
     | ChangeLedgerEntryOtherSplitAmount TransactionId String
@@ -246,7 +246,7 @@ fetchLedgerEntries serverUrl accountsDict account =
     in
     Http.get
         { url = serverUrl ++ "/accounts/" ++ account.id ++ "/transactions"
-        , expect = Http.expectJson ReceiveLedgerEntries decoder
+        , expect = Http.expectJson ReceiveLedgerEntries (Decode.map (List.map parseLedgerEntry) decoder)
         }
 
 
@@ -266,7 +266,7 @@ update { serverUrl } { accountsDict } msg model =
             ( { model
                 | ledgerEntries =
                     ledgerEntries
-                        |> List.map (Editable.fromSaved << parseLedgerEntry)
+                        |> List.map Editable.fromSaved
                         |> Loaded
               }
                 |> ensureNewLedgerEntry
