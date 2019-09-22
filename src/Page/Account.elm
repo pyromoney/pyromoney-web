@@ -353,23 +353,21 @@ update { serverUrl } { accountsDict } msg model =
 
         InitDatePickerMsg datePickerMsg ->
             let
-                ( newDatePicker, dateEvent ) =
-                    DatePicker.update DatePicker.defaultSettings datePickerMsg model.datePicker
+                ( updatedModel, _ ) =
+                    model
+                        |> updateDatePicker datePickerMsg
             in
-            ( { model
-                | datePicker = newDatePicker
-              }
+            ( updatedModel
             , Cmd.none
             )
 
         LedgerEntryDatePickerMsg transactionId datePickerMsg ->
             let
-                ( newDatePicker, dateEvent ) =
-                    DatePicker.update DatePicker.defaultSettings datePickerMsg model.datePicker
+                ( updatedModel, dateEvent ) =
+                    model
+                        |> updateDatePicker datePickerMsg
             in
-            ( { model
-                | datePicker = newDatePicker
-              }
+            ( updatedModel
                 |> updateLedgerEntry transactionId
                     (Editable.map
                         (\ledgerEntry ->
@@ -387,6 +385,19 @@ update { serverUrl } { accountsDict } msg model =
                     )
             , Cmd.none
             )
+
+
+updateDatePicker : DatePicker.Msg -> Model -> ( Model, DateEvent )
+updateDatePicker msg model =
+    let
+        ( newDatePicker, dateEvent ) =
+            DatePicker.update DatePicker.defaultSettings msg model.datePicker
+    in
+    ( { model
+        | datePicker = newDatePicker
+      }
+    , dateEvent
+    )
 
 
 
