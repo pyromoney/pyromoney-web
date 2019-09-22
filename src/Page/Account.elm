@@ -7,7 +7,7 @@ import Dict exposing (Dict)
 import Editable exposing (Editable(..))
 import Element exposing (Attribute, Element, column, el, fill, fillPortion, html, row, text, width)
 import Element.Events exposing (onClick)
-import Element.Input as Input exposing (labelHidden)
+import Element.Input as Input exposing (focusedOnLoad)
 import FormValue exposing (FormValue(..))
 import Http
 import Json.Decode as Decode
@@ -429,7 +429,7 @@ viewEditingEntryRow accountsTree timezone ledgerEntry saveMsg =
             ]
     in
     [ viewTimestamp timezone ledgerEntry.timestamp
-    , formValueEdit editAttrs ledgerEntry.description <|
+    , formValueEdit (editAttrs ++ [ focusedOnLoad ]) ledgerEntry.description <|
         ChangeLedgerEntryDescription ledgerEntry.transactionId
     , viewIfSingleSplit ledgerEntry <|
         \{ accountId } ->
