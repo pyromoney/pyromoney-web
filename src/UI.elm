@@ -1,7 +1,7 @@
-module UI exposing (accountSelect, columnRow, formValueEdit, onEnter)
+module UI exposing (accountSelect, columnRow, formValueEdit, onEnter, zIndex)
 
 import Data.Account exposing (Account, AccountId)
-import Element exposing (Attribute, Element, html)
+import Element exposing (Attribute, Element, html, htmlAttribute)
 import Element.Input as Input exposing (labelHidden)
 import FormValue exposing (FormValue)
 import Html exposing (Html, option, select, text)
@@ -77,3 +77,9 @@ onEnter msg =
                     )
             )
         )
+
+
+zIndex : Int -> Element.Attribute msg
+zIndex i =
+    style "z-index" (String.fromInt i)
+        |> htmlAttribute

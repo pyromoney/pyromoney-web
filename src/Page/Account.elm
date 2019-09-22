@@ -2,20 +2,24 @@ module Page.Account exposing (Model, Msg(..), init, update, view)
 
 import Data.Account exposing (Account, AccountId)
 import Data.Transaction as Transaction exposing (LedgerEntry, TransactionId, decodeLedgerEntry)
+import Date
 import DateFormat
+import DatePicker exposing (DatePicker)
 import Dict exposing (Dict)
 import Editable exposing (Editable(..))
-import Element exposing (Attribute, Element, column, el, fill, fillPortion, html, row, text, width)
+import Element exposing (Attribute, Element, column, el, fill, fillPortion, height, html, inFront, rgba, row, shrink, text, width)
+import Element.Background as Background
 import Element.Events exposing (onClick)
 import Element.Input as Input exposing (focusedOnLoad)
 import FormValue exposing (FormValue(..))
+import Html.Attributes
 import Http
 import Json.Decode as Decode
 import List.Extra as LE
 import Loadable exposing (Loadable(..))
 import Time
 import Tree
-import UI exposing (accountSelect, columnRow, formValueEdit, onEnter)
+import UI exposing (accountSelect, columnRow, formValueEdit, onEnter, zIndex)
 import Utils
 
 
@@ -29,6 +33,7 @@ type Msg
     | ChangeLedgerEntryAccount TransactionId AccountId
     | SaveLedgerEntry (Editable LedgerEntryForm)
     | SavedLedgerEntry (Result Http.Error LedgerEntryForm)
+    | DatePickerMsg DatePicker.Msg
 
 
 
@@ -39,6 +44,8 @@ type alias Model =
     { account : Account
     , ledgerEntries : Loadable (List (Editable LedgerEntryForm)) ()
     , timezone : Time.Zone
+    , datePicker : DatePicker
+    , expandedDatePicker : Maybe TransactionId
     }
 
 
@@ -230,11 +237,20 @@ parseLedgerEntry { transaction, split, otherSplits } =
 
 init : Config a -> AppState b -> Account -> ( Model, Cmd Msg )
 init { serverUrl } { accountsDict } account =
+    let
+        ( datePicker, datePickerMsg ) =
+            DatePicker.init
+    in
     ( { account = account
       , ledgerEntries = Loading ()
       , timezone = Time.utc
+      , datePicker = datePicker
+      , expandedDatePicker = Nothing
       }
-    , fetchLedgerEntries serverUrl accountsDict account
+    , Cmd.batch
+        [ fetchLedgerEntries serverUrl accountsDict account
+        , Cmd.map DatePickerMsg datePickerMsg
+        ]
     )
 
 
@@ -336,6 +352,24 @@ update { serverUrl } { accountsDict } msg model =
         SavedLedgerEntry (Err err) ->
             Debug.todo "Implement flash messages?"
 
+        DatePickerMsg datePickerMsg ->
+            let
+                ( newDatePicker, dateEvent ) =
+                    DatePicker.update DatePicker.defaultSettings datePickerMsg model.datePicker
+
+                -- newDate =
+                --     case dateEvent of
+                --         Picked changedDate ->
+                --             Just changedDate
+                --         _ ->
+                --             date
+            in
+            ( { model
+                | datePicker = newDatePicker
+              }
+            , Cmd.none
+            )
+
 
 
 -- VIEW
@@ -362,7 +396,7 @@ viewLedger appState model =
                         , text "Own split"
                         , text "Other split"
                         ]
-                        :: List.map (viewEntryRow appState model.timezone) ledgerEntries
+                        :: List.map (viewEntryRow appState model) ledgerEntries
                 ]
 
         Loading _ ->
@@ -377,20 +411,22 @@ viewLedgerRow attrs cols =
     columnRow ([ width fill ] ++ attrs) [ 10, 40, 20, 10, 10 ] cols
 
 
-viewEntryRow : AppState a -> Time.Zone -> Editable LedgerEntryForm -> Element Msg
-viewEntryRow { accountsTree, accountsDict } timezone ((Editable state ledgerEntry) as editableEntry) =
+viewEntryRow : AppState a -> Model -> Editable LedgerEntryForm -> Element Msg
+viewEntryRow { accountsTree, accountsDict } { timezone, datePicker } ((Editable state ledgerEntry) as editableEntry) =
     case state of
         Editable.Saved ->
             viewSavedEntryRow accountsDict timezone ledgerEntry
 
         Editable.New ->
             viewEditingEntryRow accountsTree
+                datePicker
                 timezone
                 ledgerEntry
                 (SaveLedgerEntry editableEntry)
 
         Editable.Editing modifiedEntry ->
             viewEditingEntryRow accountsTree
+                datePicker
                 timezone
                 modifiedEntry
                 (SaveLedgerEntry editableEntry)
@@ -403,7 +439,7 @@ viewSavedEntryRow accountsDict timezone ledgerEntry =
         makeEditable msg content =
             el [ onClick msg ] content
     in
-    [ viewTimestamp timezone ledgerEntry.timestamp
+    [ viewTimestamp [] timezone ledgerEntry.timestamp
     , text (ledgerEntry.description |> FormValue.toString)
     , viewIfSingleSplit ledgerEntry <|
         \{ accountId } ->
@@ -420,15 +456,15 @@ viewSavedEntryRow accountsDict timezone ledgerEntry =
         |> viewLedgerRow [ onClick <| EditLedgerEntry ledgerEntry.transactionId ]
 
 
-viewEditingEntryRow : Tree.Multitree Account -> Time.Zone -> LedgerEntryForm -> Msg -> Element Msg
-viewEditingEntryRow accountsTree timezone ledgerEntry saveMsg =
+viewEditingEntryRow : Tree.Multitree Account -> DatePicker -> Time.Zone -> LedgerEntryForm -> Msg -> Element Msg
+viewEditingEntryRow accountsTree datePicker timezone ledgerEntry saveMsg =
     let
         editAttrs =
             [ width fill
             , onEnter saveMsg
             ]
     in
-    [ viewTimestamp timezone ledgerEntry.timestamp
+    [ viewTimestamp [ inFront <| viewDatePicker datePicker ledgerEntry timezone ] timezone ledgerEntry.timestamp
     , formValueEdit (editAttrs ++ [ focusedOnLoad ]) ledgerEntry.description <|
         ChangeLedgerEntryDescription ledgerEntry.transactionId
     , viewIfSingleSplit ledgerEntry <|
@@ -474,9 +510,10 @@ viewSplitAmount ownSplitAmount =
         |> text
 
 
-viewTimestamp : Time.Zone -> Time.Posix -> Element Msg
-viewTimestamp timezone timestamp =
-    text (formatTimestamp timezone timestamp)
+viewTimestamp : List (Attribute Msg) -> Time.Zone -> Time.Posix -> Element Msg
+viewTimestamp attrs timezone timestamp =
+    el attrs <|
+        text (formatTimestamp timezone timestamp)
 
 
 formatTimestamp : Time.Zone -> Time.Posix -> String
@@ -487,4 +524,23 @@ formatTimestamp =
         , DateFormat.monthFixed
         , DateFormat.text "."
         , DateFormat.yearNumber
+        ]
+
+
+viewDatePicker : DatePicker -> LedgerEntryForm -> Time.Zone -> Element Msg
+viewDatePicker datePicker ledgerEntry timezone =
+    let
+        date =
+            ledgerEntry.timestamp |> Date.fromPosix timezone
+    in
+    row
+        [ height shrink
+        , width shrink
+        , Background.color <| rgba 0.6 0.6 1 0.7
+        , zIndex 10000
+        ]
+        [ datePicker
+            |> DatePicker.view (Just date) DatePicker.defaultSettings
+            |> html
+            |> Element.map DatePickerMsg
         ]
