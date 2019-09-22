@@ -119,7 +119,7 @@ editLedgerEntry transactionId model =
 setLedgerEntryDescription : TransactionId -> String -> Model -> Model
 setLedgerEntryDescription transactionId newDescription =
     updateLedgerEntry transactionId <|
-        Editable.mapTarget
+        Editable.map
             (\entry ->
                 { entry | description = FormValue.fromString newDescription }
             )
@@ -128,7 +128,7 @@ setLedgerEntryDescription transactionId newDescription =
 setLedgerEntryOwnSplitAmount : TransactionId -> String -> Model -> Model
 setLedgerEntryOwnSplitAmount transactionId newAmount =
     updateLedgerEntry transactionId <|
-        Editable.mapTarget
+        Editable.map
             (\entry ->
                 { entry | ownSplitAmount = FormValue.parseFloat newAmount }
             )
@@ -137,7 +137,7 @@ setLedgerEntryOwnSplitAmount transactionId newAmount =
 setLedgerEntryOtherSplitAmount : TransactionId -> String -> Model -> Model
 setLedgerEntryOtherSplitAmount transactionId newAmount =
     updateLedgerEntry transactionId <|
-        Editable.mapTarget
+        Editable.map
             (\entry ->
                 case entry.otherSplit of
                     SingleSplit otherSplit ->
@@ -155,7 +155,7 @@ setLedgerEntryOtherSplitAmount transactionId newAmount =
 setLedgerEntryAccount : TransactionId -> AccountId -> Model -> Model
 setLedgerEntryAccount transactionId accountId =
     updateLedgerEntry transactionId <|
-        Editable.mapTarget
+        Editable.map
             (\entry ->
                 case entry.otherSplit of
                     SingleSplit otherSplit ->

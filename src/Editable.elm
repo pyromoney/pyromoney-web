@@ -1,8 +1,8 @@
 module Editable exposing
     ( Editable(..), State(..)
     , fromNew, fromSaved, fromEditing
-    , edit, cancel, save, targetState
-    , target, mapTarget
+    , edit, cancel, save
+    , target, targetState
     , map, mapState
     , isNew, isEditing, isSaved
     )
@@ -20,17 +20,17 @@ module Editable exposing
 @docs fromNew, fromSaved, fromEditing
 
 
-# State transitions
+# State
 
-@docs edit, cancel, save, targetState
-
-
-# Editing target
-
-@docs target, mapTarget
+@docs edit, cancel, save
 
 
-# General mapping functions
+# Accessing target
+
+@docs target, targetState
+
+
+# Mapping
 
 @docs map, mapState
 
@@ -123,14 +123,10 @@ targetState (Editable state _) =
     state
 
 
-{-| Map over editing target.
-
-Analoguously to the target function, transforms intermediate content in Editing
-state, regular content otherwise. Makes it possible to modify Saved Page.
-
+{-| Map over intermediate content in Editing state, regular content otherwise.
 -}
-mapTarget : (a -> a) -> Editable a -> Editable a
-mapTarget f (Editable state content) =
+map : (a -> a) -> Editable a -> Editable a
+map f (Editable state content) =
     case state of
         New ->
             Editable New (f content)
@@ -140,11 +136,6 @@ mapTarget f (Editable state content) =
 
         Saved ->
             Editable Saved (f content)
-
-
-map : (a -> a) -> Editable a -> Editable a
-map f (Editable state content) =
-    Editable state (f content)
 
 
 mapState : (State a -> State a) -> Editable a -> Editable a
