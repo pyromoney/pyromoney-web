@@ -4,7 +4,7 @@ import Data.Account exposing (Account, AccountId)
 import Data.Transaction as Transaction exposing (LedgerEntry, TransactionId, decodeLedgerEntry)
 import Date
 import DateFormat
-import DatePicker exposing (DatePicker)
+import DatePicker exposing (DateEvent(..), DatePicker)
 import Dict exposing (Dict)
 import Editable exposing (Editable(..))
 import Element exposing (Attribute, Element, column, el, fill, fillPortion, height, html, inFront, paragraph, rgba, row, shrink, text, width)
@@ -33,7 +33,8 @@ type Msg
     | ChangeLedgerEntryAccount TransactionId AccountId
     | SaveLedgerEntry (Editable LedgerEntryForm)
     | SavedLedgerEntry (Result Http.Error LedgerEntryForm)
-    | DatePickerMsg DatePicker.Msg
+    | InitDatePickerMsg DatePicker.Msg
+    | LedgerEntryDatePickerMsg TransactionId DatePicker.Msg
 
 
 
@@ -45,7 +46,6 @@ type alias Model =
     , ledgerEntries : Loadable (List (Editable LedgerEntryForm)) ()
     , timezone : Time.Zone
     , datePicker : DatePicker
-    , expandedDatePicker : Maybe TransactionId
     }
 
 
@@ -245,11 +245,10 @@ init { serverUrl } { accountsDict } account =
       , ledgerEntries = Loading ()
       , timezone = Time.utc
       , datePicker = datePicker
-      , expandedDatePicker = Nothing
       }
     , Cmd.batch
         [ fetchLedgerEntries serverUrl accountsDict account
-        , Cmd.map DatePickerMsg datePickerMsg
+        , Cmd.map InitDatePickerMsg datePickerMsg
         ]
     )
 
@@ -352,21 +351,40 @@ update { serverUrl } { accountsDict } msg model =
         SavedLedgerEntry (Err err) ->
             Debug.todo "Implement flash messages?"
 
-        DatePickerMsg datePickerMsg ->
+        InitDatePickerMsg datePickerMsg ->
             let
                 ( newDatePicker, dateEvent ) =
                     DatePicker.update DatePicker.defaultSettings datePickerMsg model.datePicker
-
-                -- newDate =
-                --     case dateEvent of
-                --         Picked changedDate ->
-                --             Just changedDate
-                --         _ ->
-                --             date
             in
             ( { model
                 | datePicker = newDatePicker
               }
+            , Cmd.none
+            )
+
+        LedgerEntryDatePickerMsg transactionId datePickerMsg ->
+            let
+                ( newDatePicker, dateEvent ) =
+                    DatePicker.update DatePicker.defaultSettings datePickerMsg model.datePicker
+            in
+            ( { model
+                | datePicker = newDatePicker
+              }
+                |> updateLedgerEntry transactionId
+                    (Editable.map
+                        (\ledgerEntry ->
+                            let
+                                timestamp =
+                                    case dateEvent of
+                                        Picked changedDate ->
+                                            changedDate |> Utils.midnight model.timezone
+
+                                        _ ->
+                                            ledgerEntry.timestamp
+                            in
+                            { ledgerEntry | timestamp = timestamp }
+                        )
+                    )
             , Cmd.none
             )
 
@@ -542,5 +560,5 @@ viewDatePicker datePicker ledgerEntry timezone =
         [ datePicker
             |> DatePicker.view (Just date) DatePicker.defaultSettings
             |> html
-            |> Element.map DatePickerMsg
+            |> Element.map (LedgerEntryDatePickerMsg ledgerEntry.transactionId)
         ]
