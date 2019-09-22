@@ -473,13 +473,13 @@ viewEditingEntryRow accountsTree datePicker timezone ledgerEntry saveMsg =
             accountSelect editAttrs accountsTree (Just accountId) <|
                 ChangeLedgerEntryAccount ledgerEntry.transactionId
     , viewIfSingleSplit ledgerEntry <|
-        \{ amount } ->
-            formValueEdit editAttrs amount <|
-                ChangeLedgerEntryOtherSplitAmount ledgerEntry.transactionId
-    , viewIfSingleSplit ledgerEntry <|
         \_ ->
             formValueEdit editAttrs ledgerEntry.ownSplitAmount <|
                 ChangeLedgerEntryOwnSplitAmount ledgerEntry.transactionId
+    , viewIfSingleSplit ledgerEntry <|
+        \{ amount } ->
+            formValueEdit editAttrs amount <|
+                ChangeLedgerEntryOtherSplitAmount ledgerEntry.transactionId
     ]
         |> viewLedgerRow []
 
