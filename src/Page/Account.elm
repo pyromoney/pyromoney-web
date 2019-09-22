@@ -20,8 +20,8 @@ import Utils
 
 
 type Msg
-    = RequestLedgerEntries Account
-    | ReceiveLedgerEntries (Result Http.Error (List LedgerEntryForm))
+    = GetLedgerEntries Account
+    | GotLedgerEntries (Result Http.Error (List LedgerEntryForm))
     | EditLedgerEntry TransactionId
     | ChangeLedgerEntryDescription TransactionId String
     | ChangeLedgerEntryOtherSplitAmount TransactionId String
@@ -246,7 +246,7 @@ fetchLedgerEntries serverUrl accountsDict account =
     in
     Http.get
         { url = serverUrl ++ "/accounts/" ++ account.id ++ "/transactions"
-        , expect = Http.expectJson ReceiveLedgerEntries (Decode.map (List.map parseLedgerEntry) decoder)
+        , expect = Http.expectJson GotLedgerEntries (Decode.map (List.map parseLedgerEntry) decoder)
         }
 
 
@@ -257,12 +257,12 @@ fetchLedgerEntries serverUrl accountsDict account =
 update : Config a -> AppState b -> Msg -> Model -> ( Model, Cmd Msg )
 update { serverUrl } { accountsDict } msg model =
     case msg of
-        RequestLedgerEntries account ->
+        GetLedgerEntries account ->
             ( model
             , fetchLedgerEntries serverUrl accountsDict account
             )
 
-        ReceiveLedgerEntries (Ok ledgerEntries) ->
+        GotLedgerEntries (Ok ledgerEntries) ->
             ( { model
                 | ledgerEntries =
                     ledgerEntries
@@ -273,7 +273,7 @@ update { serverUrl } { accountsDict } msg model =
             , Cmd.none
             )
 
-        ReceiveLedgerEntries (Err error) ->
+        GotLedgerEntries (Err error) ->
             ( { model | ledgerEntries = Failure <| Utils.httpErrorString error }
             , Cmd.none
             )
