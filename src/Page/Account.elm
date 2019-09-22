@@ -536,7 +536,7 @@ viewDatePicker datePicker ledgerEntry timezone =
     row
         [ height shrink
         , width shrink
-        , Background.color <| rgba 0.6 0.6 1 0.7
+        , Background.color <| rgba 0.8 0.8 1 0.9
         , zIndex 10000
         ]
         [ datePicker
