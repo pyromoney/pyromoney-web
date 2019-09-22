@@ -1,4 +1,4 @@
-module UI exposing (accountSelect, columnRow, formValueEdit)
+module UI exposing (accountSelect, columnRow, formValueEdit, onEnter)
 
 import Data.Account exposing (Account, AccountId)
 import Element exposing (Attribute, Element, html)
@@ -7,6 +7,7 @@ import FormValue exposing (FormValue)
 import Html exposing (Html, option, select, text)
 import Html.Attributes exposing (selected, style, value)
 import Html.Events exposing (onInput)
+import Json.Decode as Decode
 import Tree
 
 
@@ -59,3 +60,20 @@ columnRow attrs widths cols =
     in
     Element.row ([ Element.width Element.fill ] ++ attrs) <|
         List.map2 col widths cols
+
+
+onEnter : msg -> Element.Attribute msg
+onEnter msg =
+    Element.htmlAttribute
+        (Html.Events.on "keyup"
+            (Decode.field "key" Decode.string
+                |> Decode.andThen
+                    (\key ->
+                        if key == "Enter" then
+                            Decode.succeed msg
+
+                        else
+                            Decode.fail "Not the enter key"
+                    )
+            )
+        )

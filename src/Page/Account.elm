@@ -15,7 +15,7 @@ import List.Extra as LE
 import Loadable exposing (Loadable(..))
 import Time
 import Tree
-import UI exposing (accountSelect, columnRow, formValueEdit)
+import UI exposing (accountSelect, columnRow, formValueEdit, onEnter)
 import Utils
 
 
@@ -27,6 +27,7 @@ type Msg
     | ChangeLedgerEntryOtherSplitAmount TransactionId String
     | ChangeLedgerEntryOwnSplitAmount TransactionId String
     | ChangeLedgerEntryAccount TransactionId AccountId
+    | SaveLedgerEntry (Editable LedgerEntryForm)
 
 
 
@@ -301,6 +302,15 @@ update { serverUrl } { accountsDict } msg model =
             , Cmd.none
             )
 
+        SaveLedgerEntry editableEntry ->
+            let
+                _ =
+                    Debug.log "SaveLedgerEntry" editableEntry
+            in
+            ( model
+            , Cmd.none
+            )
+
 
 
 -- VIEW
@@ -343,16 +353,22 @@ viewLedgerRow attrs cols =
 
 
 viewEntryRow : AppState a -> Time.Zone -> Editable LedgerEntryForm -> Element Msg
-viewEntryRow { accountsTree, accountsDict } timezone (Editable state ledgerEntry) =
+viewEntryRow { accountsTree, accountsDict } timezone ((Editable state ledgerEntry) as editableEntry) =
     case state of
         Editable.Saved ->
             viewSavedEntryRow accountsDict timezone ledgerEntry
 
         Editable.New ->
-            viewEditingEntryRow accountsTree timezone ledgerEntry
+            viewEditingEntryRow accountsTree
+                timezone
+                ledgerEntry
+                (SaveLedgerEntry editableEntry)
 
         Editable.Editing modifiedEntry ->
-            viewEditingEntryRow accountsTree timezone modifiedEntry
+            viewEditingEntryRow accountsTree
+                timezone
+                modifiedEntry
+                (SaveLedgerEntry editableEntry)
 
 
 viewSavedEntryRow : Dict AccountId Account -> Time.Zone -> LedgerEntryForm -> Element Msg
@@ -379,23 +395,29 @@ viewSavedEntryRow accountsDict timezone ledgerEntry =
         |> viewLedgerRow [ onClick <| EditLedgerEntry ledgerEntry.transactionId ]
 
 
-viewEditingEntryRow : Tree.Multitree Account -> Time.Zone -> LedgerEntryForm -> Element Msg
-viewEditingEntryRow accountsTree timezone ledgerEntry =
+viewEditingEntryRow : Tree.Multitree Account -> Time.Zone -> LedgerEntryForm -> Msg -> Element Msg
+viewEditingEntryRow accountsTree timezone ledgerEntry saveMsg =
+    let
+        editAttrs =
+            [ width fill
+            , onEnter saveMsg
+            ]
+    in
     [ viewTimestamp timezone ledgerEntry.timestamp
-    , formValueEdit [ width fill ] ledgerEntry.description <|
+    , formValueEdit editAttrs ledgerEntry.description <|
         ChangeLedgerEntryDescription ledgerEntry.transactionId
     , viewIfSingleSplit ledgerEntry <|
         \{ accountId } ->
             -- TOOD: Smell because accountId could theoretically be "" but we never really pass Nothing so why Maybe.
-            accountSelect [ width fill ] accountsTree (Just accountId) <|
+            accountSelect editAttrs accountsTree (Just accountId) <|
                 ChangeLedgerEntryAccount ledgerEntry.transactionId
     , viewIfSingleSplit ledgerEntry <|
         \{ amount } ->
-            formValueEdit [ width fill ] amount <|
+            formValueEdit editAttrs amount <|
                 ChangeLedgerEntryOtherSplitAmount ledgerEntry.transactionId
     , viewIfSingleSplit ledgerEntry <|
         \_ ->
-            formValueEdit [ width fill ] ledgerEntry.ownSplitAmount <|
+            formValueEdit editAttrs ledgerEntry.ownSplitAmount <|
                 ChangeLedgerEntryOwnSplitAmount ledgerEntry.transactionId
     ]
         |> viewLedgerRow []
