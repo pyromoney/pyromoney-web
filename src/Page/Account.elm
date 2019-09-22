@@ -12,6 +12,7 @@ import FormValue exposing (FormValue(..))
 import Http
 import Json.Decode as Decode
 import List.Extra as LE
+import Loadable exposing (Loadable(..))
 import Time
 import Tree
 import UI exposing (accountSelect, columnRow, formValueEdit)
@@ -22,7 +23,6 @@ type Msg
     = RequestLedgerEntries Account
     | ReceiveLedgerEntries (Result Http.Error (List LedgerEntry))
     | EditLedgerEntry TransactionId
-      -- TODO: Use lens?
     | ChangeLedgerEntryDescription TransactionId String
     | ChangeLedgerEntryOtherSplitAmount TransactionId String
     | ChangeLedgerEntryOwnSplitAmount TransactionId String
@@ -35,14 +35,13 @@ type Msg
 
 type alias Model =
     { account : Account
-    , ledgerEntries : List (Editable LedgerEntryForm)
-    , lastError : String
+    , ledgerEntries : Loadable (List (Editable LedgerEntryForm)) ()
     , timezone : Time.Zone
     }
 
 
-type alias Config a =
-    { a | serverUrl : ServerUrl }
+
+-- Representation of LedgerEntry for display and editing purposes.
 
 
 type alias LedgerEntryForm =
@@ -54,12 +53,28 @@ type alias LedgerEntryForm =
     }
 
 
+
+-- Represents the other split (or splits).
+
+
 type OtherSplit
     = SingleSplit
         { amount : FormValue Float
         , accountId : AccountId
         }
     | MultipleSplits
+
+
+
+-- Configuration received from Main.
+
+
+type alias Config a =
+    { a | serverUrl : ServerUrl }
+
+
+
+-- Data received from Main.
 
 
 type alias AppState a =
@@ -83,7 +98,7 @@ updateLedgerEntry transactionId f model =
     { model
         | ledgerEntries =
             model.ledgerEntries
-                |> LE.updateIf (eqTransactionId transactionId) f
+                |> Loadable.map (LE.updateIf (eqTransactionId transactionId) f)
     }
 
 
@@ -92,7 +107,7 @@ editLedgerEntry transactionId model =
     { model
         | ledgerEntries =
             model.ledgerEntries
-                |> List.map Editable.cancel
+                |> Loadable.map (List.map Editable.cancel)
     }
         |> updateLedgerEntry transactionId Editable.edit
 
@@ -154,17 +169,23 @@ setLedgerEntryAccount transactionId accountId =
 ensureNewLedgerEntry : Model -> Model
 ensureNewLedgerEntry model =
     let
-        ( newEntries, rest ) =
-            model.ledgerEntries
-                |> List.partition Editable.isNew
+        doEnsure entries =
+            let
+                ( newEntries, rest ) =
+                    entries
+                        |> List.partition Editable.isNew
 
-        newEntry =
-            newEntries
-                |> List.head
-                |> Maybe.withDefault (Editable.fromNew makeLedgerEntry)
+                newEntry =
+                    newEntries
+                        |> List.head
+                        |> Maybe.withDefault (Editable.fromNew makeLedgerEntry)
+            in
+            rest ++ [ newEntry ]
     in
     { model
-        | ledgerEntries = rest ++ [ newEntry ]
+        | ledgerEntries =
+            model.ledgerEntries
+                |> Loadable.map doEnsure
     }
 
 
@@ -182,8 +203,8 @@ makeLedgerEntry =
     }
 
 
-ledgerEntryToForm : LedgerEntry -> LedgerEntryForm
-ledgerEntryToForm { transaction, split, otherSplits } =
+parseLedgerEntry : LedgerEntry -> LedgerEntryForm
+parseLedgerEntry { transaction, split, otherSplits } =
     { timestamp = transaction.timestamp
     , transactionId = transaction.id
     , description = transaction.description |> FormValue.fromString
@@ -208,8 +229,7 @@ ledgerEntryToForm { transaction, split, otherSplits } =
 init : Config a -> AppState b -> Account -> ( Model, Cmd Msg )
 init { serverUrl } { accountsDict } account =
     ( { account = account
-      , ledgerEntries = []
-      , lastError = ""
+      , ledgerEntries = Loading ()
       , timezone = Time.utc
       }
     , fetchLedgerEntries serverUrl accountsDict account
@@ -244,14 +264,15 @@ update { serverUrl } { accountsDict } msg model =
             ( { model
                 | ledgerEntries =
                     ledgerEntries
-                        |> List.map (Editable.fromSaved << ledgerEntryToForm)
+                        |> List.map (Editable.fromSaved << parseLedgerEntry)
+                        |> Loaded
               }
                 |> ensureNewLedgerEntry
             , Cmd.none
             )
 
         ReceiveLedgerEntries (Err error) ->
-            ( { model | lastError = Utils.httpErrorString error }
+            ( { model | ledgerEntries = Failure <| Utils.httpErrorString error }
             , Cmd.none
             )
 
@@ -276,7 +297,9 @@ update { serverUrl } { accountsDict } msg model =
             )
 
         ChangeLedgerEntryAccount transactionId accountId ->
-            ( model |> setLedgerEntryAccount transactionId accountId, Cmd.none )
+            ( model |> setLedgerEntryAccount transactionId accountId
+            , Cmd.none
+            )
 
 
 
@@ -286,22 +309,32 @@ update { serverUrl } { accountsDict } msg model =
 view : AppState a -> Model -> Element Msg
 view appState model =
     column [ width fill ] <|
-        [ el [] <| text model.lastError
-        , el [] <| text model.account.name
+        [ el [] <| text model.account.name
+        , viewLedger appState model
         ]
-            ++ viewLedger appState model
 
 
-viewLedger : AppState a -> Model -> List (Element Msg)
+viewLedger : AppState a -> Model -> Element Msg
 viewLedger appState model =
-    viewLedgerRow []
-        [ text "Date"
-        , text "Description"
-        , text "Transfer"
-        , text "Own split"
-        , text "Other split"
-        ]
-        :: List.map (viewEntryRow appState model) model.ledgerEntries
+    case model.ledgerEntries of
+        Loaded ledgerEntries ->
+            row [ width fill ] <|
+                [ column [ width fill ] <|
+                    viewLedgerRow []
+                        [ text "Date"
+                        , text "Description"
+                        , text "Transfer"
+                        , text "Own split"
+                        , text "Other split"
+                        ]
+                        :: List.map (viewEntryRow appState model.timezone) ledgerEntries
+                ]
+
+        Loading _ ->
+            text "Loading"
+
+        Failure err ->
+            text err
 
 
 viewLedgerRow : List (Attribute Msg) -> List (Element Msg) -> Element Msg
@@ -309,8 +342,8 @@ viewLedgerRow attrs cols =
     columnRow ([ width fill ] ++ attrs) [ 10, 40, 20, 10, 10 ] cols
 
 
-viewEntryRow : AppState a -> Model -> Editable LedgerEntryForm -> Element Msg
-viewEntryRow { accountsTree, accountsDict } { timezone } (Editable state ledgerEntry) =
+viewEntryRow : AppState a -> Time.Zone -> Editable LedgerEntryForm -> Element Msg
+viewEntryRow { accountsTree, accountsDict } timezone (Editable state ledgerEntry) =
     case state of
         Editable.Saved ->
             viewSavedEntryRow accountsDict timezone ledgerEntry
