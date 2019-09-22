@@ -14,7 +14,7 @@ import Json.Decode as Decode
 import List.Extra as LE
 import Time
 import Tree
-import UI exposing (accountSelect)
+import UI exposing (accountSelect, columnRow, formValueEdit)
 import Utils
 
 
@@ -27,10 +27,6 @@ type Msg
     | ChangeLedgerEntryOtherSplitAmount TransactionId String
     | ChangeLedgerEntryOwnSplitAmount TransactionId String
     | ChangeLedgerEntryAccount TransactionId AccountId
-
-
-
--- | ChangeLedgerEntrySplitAmount TransactionId Float
 
 
 type alias Model =
@@ -145,7 +141,11 @@ setLedgerEntryOtherSplitAmount transactionId newAmount =
             (\entry ->
                 case entry.otherSplit of
                     SingleSplit otherSplit ->
-                        { entry | otherSplit = SingleSplit { otherSplit | amount = FormValue.parseFloat newAmount } }
+                        let
+                            updatedSplit =
+                                SingleSplit { otherSplit | amount = FormValue.parseFloat newAmount }
+                        in
+                        { entry | otherSplit = updatedSplit }
 
                     MultipleSplits ->
                         entry
@@ -159,7 +159,11 @@ setLedgerEntryAccount transactionId accountId =
             (\entry ->
                 case entry.otherSplit of
                     SingleSplit otherSplit ->
-                        { entry | otherSplit = SingleSplit { otherSplit | accountId = accountId } }
+                        let
+                            updatedSplit =
+                                SingleSplit { otherSplit | accountId = accountId }
+                        in
+                        { entry | otherSplit = updatedSplit }
 
                     MultipleSplits ->
                         entry
@@ -281,90 +285,81 @@ viewLedgerEntries appState model =
         , text "Own split"
         , text "Other split"
         ]
-        :: List.map (viewLedgerEntry appState model) model.ledgerEntries
+        :: List.map (viewLedgerRow appState model) model.ledgerEntries
 
 
 ledgerRow : List (Attribute Msg) -> List (Element Msg) -> Element Msg
 ledgerRow attrs cols =
-    let
-        widths =
-            [ 10, 40, 20, 10, 10, 10 ]
-
-        col w content =
-            column [ width (fillPortion w) ] [ content ]
-    in
-    row ([ width fill ] ++ attrs) <|
-        List.map2 col widths cols
+    columnRow ([ width fill ] ++ attrs) [ 10, 40, 20, 10, 10 ] cols
 
 
-viewLedgerEntry : AppState a -> Model -> Editable LedgerEntryForm -> Element Msg
-viewLedgerEntry { accountsTree, accountsDict } { timezone } (Editable state ledgerEntry) =
+viewLedgerRow : AppState a -> Model -> Editable LedgerEntryForm -> Element Msg
+viewLedgerRow { accountsTree, accountsDict } { timezone } (Editable state ledgerEntry) =
     case state of
         Editable.Saved ->
-            [ viewTimestamp timezone ledgerEntry.timestamp
-            , text (ledgerEntry.description |> FormValue.toString)
-            , case ledgerEntry.otherSplit of
-                SingleSplit { accountId } ->
-                    accountsDict
-                        |> Dict.get accountId
-                        |> Maybe.map (text << .name)
-                        |> Maybe.withDefault (text "")
-
-                MultipleSplits ->
-                    text "Split transaction"
-            , viewSplitAmount ledgerEntry.ownSplitAmount
-            , case ledgerEntry.otherSplit of
-                SingleSplit { amount } ->
-                    viewSplitAmount amount
-
-                MultipleSplits ->
-                    text "Split transaction"
-            ]
-                |> List.map (makeEditable <| EditLedgerEntry ledgerEntry.transactionId)
-                |> ledgerRow [ onClick <| EditLedgerEntry ledgerEntry.transactionId ]
+            viewSavedEntryRow accountsDict timezone ledgerEntry
 
         Editable.New ->
-            viewEntryEditor accountsTree timezone ledgerEntry
+            viewEditingEntryRow accountsTree timezone ledgerEntry
 
         Editable.Editing modifiedEntry ->
-            viewEntryEditor accountsTree timezone modifiedEntry
+            viewEditingEntryRow accountsTree timezone modifiedEntry
 
 
-viewEntryEditor : Tree.Multitree Account -> Time.Zone -> LedgerEntryForm -> Element Msg
-viewEntryEditor accountsTree timezone ledgerEntry =
+viewSavedEntryRow : Dict AccountId Account -> Time.Zone -> LedgerEntryForm -> Element Msg
+viewSavedEntryRow accountsDict timezone ledgerEntry =
+    let
+        makeEditable : Msg -> Element Msg -> Element Msg
+        makeEditable msg content =
+            el [ onClick msg ] content
+    in
     [ viewTimestamp timezone ledgerEntry.timestamp
-    , textEdit ledgerEntry.description (ChangeLedgerEntryDescription ledgerEntry.transactionId)
-    , case ledgerEntry.otherSplit of
-        SingleSplit { accountId } ->
+    , text (ledgerEntry.description |> FormValue.toString)
+    , viewIfSingleSplit ledgerEntry <|
+        \{ accountId } ->
+            accountsDict
+                |> Dict.get accountId
+                |> Maybe.map (text << .name)
+                |> Maybe.withDefault (text "")
+    , viewSplitAmount ledgerEntry.ownSplitAmount
+    , viewIfSingleSplit ledgerEntry <|
+        \{ amount } ->
+            viewSplitAmount amount
+    ]
+        |> List.map (makeEditable <| EditLedgerEntry ledgerEntry.transactionId)
+        |> ledgerRow [ onClick <| EditLedgerEntry ledgerEntry.transactionId ]
+
+
+viewEditingEntryRow : Tree.Multitree Account -> Time.Zone -> LedgerEntryForm -> Element Msg
+viewEditingEntryRow accountsTree timezone ledgerEntry =
+    [ viewTimestamp timezone ledgerEntry.timestamp
+    , formValueEdit [ width fill ] ledgerEntry.description <|
+        ChangeLedgerEntryDescription ledgerEntry.transactionId
+    , viewIfSingleSplit ledgerEntry <|
+        \{ accountId } ->
             -- TOOD: Smell because accountId could theoretically be "" but we never really pass Nothing so why Maybe.
-            accountSelect accountsTree (Just accountId) <| ChangeLedgerEntryAccount ledgerEntry.transactionId
-
-        MultipleSplits ->
-            text "Split transaction"
-    , case ledgerEntry.otherSplit of
-        SingleSplit { amount } ->
-            textEdit amount <| ChangeLedgerEntryOtherSplitAmount ledgerEntry.transactionId
-
-        MultipleSplits ->
-            text "Split transaction"
-    , case ledgerEntry.otherSplit of
-        SingleSplit _ ->
-            textEdit ledgerEntry.ownSplitAmount <| ChangeLedgerEntryOwnSplitAmount ledgerEntry.transactionId
-
-        MultipleSplits ->
-            text "Split transaction"
+            accountSelect [ width fill ] accountsTree (Just accountId) <|
+                ChangeLedgerEntryAccount ledgerEntry.transactionId
+    , viewIfSingleSplit ledgerEntry <|
+        \{ amount } ->
+            formValueEdit [ width fill ] amount <|
+                ChangeLedgerEntryOtherSplitAmount ledgerEntry.transactionId
+    , viewIfSingleSplit ledgerEntry <|
+        \_ ->
+            formValueEdit [ width fill ] ledgerEntry.ownSplitAmount <|
+                ChangeLedgerEntryOwnSplitAmount ledgerEntry.transactionId
     ]
         |> ledgerRow []
 
 
-textEdit : FormValue a -> (String -> Msg) -> Element Msg
-textEdit value msg =
-    Input.text [ width fill ]
-        { onChange = msg
-        , text = FormValue.toString value
-        , placeholder = Nothing
-        , label = labelHidden ""
-        }
+viewIfSingleSplit : LedgerEntryForm -> ({ amount : FormValue Float, accountId : AccountId } -> Element Msg) -> Element Msg
+viewIfSingleSplit ledgerEntry present =
+    case ledgerEntry.otherSplit of
+        SingleSplit split ->
+            present split
+
+        MultipleSplits ->
+            text "Split transaction"
 
 
 viewSplitAmount : FormValue Float -> Element Msg
@@ -381,11 +376,6 @@ viewSplitAmount ownSplitAmount =
             )
         |> Maybe.withDefault ""
         |> text
-
-
-makeEditable : Msg -> Element Msg -> Element Msg
-makeEditable msg content =
-    el [ onClick msg ] content
 
 
 viewTimestamp : Time.Zone -> Time.Posix -> Element Msg

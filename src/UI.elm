@@ -1,20 +1,33 @@
-module UI exposing (accountSelect)
+module UI exposing (accountSelect, columnRow, formValueEdit)
 
 import Data.Account exposing (Account, AccountId)
-import Element exposing (Element, html)
-import Html exposing (option, select, text)
-import Html.Attributes exposing (selected, value)
+import Element exposing (Attribute, Element, html)
+import Element.Input as Input exposing (labelHidden)
+import FormValue exposing (FormValue)
+import Html exposing (Html, option, select, text)
+import Html.Attributes exposing (selected, style, value)
 import Html.Events exposing (onInput)
 import Tree
 
 
-accountSelect : Tree.Multitree Account -> Maybe AccountId -> (AccountId -> msg) -> Element msg
-accountSelect accountsTree maybeAccountId msg =
+accountSelect : List (Attribute msg) -> Tree.Multitree Account -> Maybe AccountId -> (AccountId -> msg) -> Element msg
+accountSelect attrs accountsTree maybeAccountId msg =
     let
+        accountOption : AccountId -> String -> Bool -> Html msg
+        accountOption id name isSelected =
+            option
+                [ value id
+                , selected isSelected
+                ]
+                [ text name ]
+
         noSelection =
             accountOption "" "(none)" <| (maybeAccountId == Nothing)
     in
-    select [ onInput msg ]
+    select
+        [ onInput msg
+        , style "width" "100%"
+        ]
         (noSelection
             :: (accountsTree
                     |> Tree.toList
@@ -25,12 +38,24 @@ accountSelect accountsTree maybeAccountId msg =
                )
         )
         |> html
+        |> Element.el attrs
 
 
-accountOption : AccountId -> String -> Bool -> Html.Html msg
-accountOption id name isSelected =
-    option
-        [ value id
-        , selected isSelected
-        ]
-        [ text name ]
+formValueEdit : List (Attribute msg) -> FormValue a -> (String -> msg) -> Element msg
+formValueEdit attrs value msg =
+    Input.text attrs
+        { onChange = msg
+        , text = FormValue.toString value
+        , placeholder = Nothing
+        , label = labelHidden ""
+        }
+
+
+columnRow : List (Attribute msg) -> List Int -> List (Element msg) -> Element msg
+columnRow attrs widths cols =
+    let
+        col w content =
+            Element.column [ Element.width (Element.fillPortion w) ] [ content ]
+    in
+    Element.row ([ Element.width Element.fill ] ++ attrs) <|
+        List.map2 col widths cols
