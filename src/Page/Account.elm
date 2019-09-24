@@ -71,7 +71,7 @@ type OtherSplit
         { amount : FormValue Float
         , accountId : AccountId
         }
-    | MultipleSplits
+    | MultipleSplits -- TODO: Implement.
 
 
 
